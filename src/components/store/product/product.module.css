@@ -1,0 +1,235 @@
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+  gap: var(--s-8);
+  padding-top: var(--s-5);
+}
+.viewer {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  height: calc(100svh - var(--header-h) - 32px);
+  min-height: 560px;
+}
+.vTop {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+}
+.lights {
+  display: flex;
+  gap: var(--s-4);
+}
+.vBottom {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.views {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent);
+  mask-image: linear-gradient(90deg, #000 90%, transparent);
+}
+.views :global(.chip) {
+  background: var(--overlay);
+  backdrop-filter: blur(6px);
+}
+.rot {
+  flex-shrink: 0;
+}
+.hint {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+.info {
+  display: grid;
+  gap: var(--s-4);
+  align-content: start;
+  padding: var(--s-7) 0;
+}
+.actions {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.wish {
+  width: 100%;
+}
+.inspector {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  padding: 0 6%;
+  cursor: crosshair;
+}
+.strip {
+  aspect-ratio: 4.8;
+  width: 100%;
+  box-shadow: var(--shadow);
+}
+.stripMarks {
+  display: grid;
+  grid-template-columns: 40% 16% 44%;
+  margin-top: 10px;
+  font-size: var(--t-2xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.stripMarks span {
+  border-top: 1px solid var(--line-2);
+  padding-top: 6px;
+}
+.lens {
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  transform: translate(-50%, -115%);
+  box-shadow: 0 0 0 1px var(--gold), var(--shadow);
+  pointer-events: none;
+  transition: opacity 0.4s var(--ease-silk);
+}
+
+/* sections below the fold */
+.chapter {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--s-7);
+  padding: var(--s-9) 0;
+  border-top: 1px solid var(--line);
+}
+.chapter > :first-child {
+  position: sticky;
+  top: calc(var(--header-h) + 32px);
+  align-self: start;
+}
+.textileRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-4);
+}
+.textileRow figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.textileRow figure > div {
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.palette {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--s-5);
+  flex-wrap: wrap;
+}
+.palette span {
+  display: grid;
+  gap: 6px;
+  font-size: var(--t-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.palette i {
+  width: 64px;
+  height: 64px;
+  display: block;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.story {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3.2vw, 46px);
+  line-height: 1.22;
+  font-weight: 300;
+  max-width: 26ch;
+  margin: 0;
+}
+.renders {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+}
+.renders figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.renders .rimg {
+  aspect-ratio: 3 / 4;
+  position: relative;
+}
+.renders img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.artisanCard {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--s-6);
+  align-items: center;
+}
+.artisanCard > div:first-child {
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.related {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-6);
+}
+@media (max-width: 960px) {
+  .top {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .viewer {
+    position: relative;
+    top: 0;
+    height: 72svh;
+    min-height: 460px;
+    margin: 0 calc(var(--gutter) * -1);
+  }
+  .lights {
+    display: none;
+  }
+  .chapter {
+    grid-template-columns: 1fr;
+    gap: var(--s-5);
+    padding: var(--s-8) 0;
+  }
+  .chapter > :first-child {
+    position: static;
+  }
+  .renders,
+  .related {
+    grid-template-columns: 1fr 1fr;
+  }
+  .artisanCard {
+    grid-template-columns: 1fr;
+  }
+}
