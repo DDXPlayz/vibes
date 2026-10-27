@@ -1,0 +1,346 @@
+// VIBES — production data model (PostgreSQL).
+//
+// The prototype runs on a JSON file store behind src/server/db.ts with the
+// same shapes. This schema is the target for production: swap the repository
+// implementation, keep every page and API route.
+//
+// Principle: a Product never owns pixels. It references one Textile (the scan
+// of the physical saree — the source of truth) and reusable Studio assets.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  owner
+  manager
+  staff
+}
+
+enum ProductStatus {
+  draft
+  published
+}
+
+enum InventoryModel {
+  unique
+  limited
+  multiple
+}
+
+enum AvailabilityState {
+  available
+  reserved
+  sold
+  archived
+  private
+}
+
+enum OrderStatus {
+  pending
+  paid
+  shipped
+  delivered
+  cancelled
+}
+
+enum CollectionKind {
+  region
+  weave
+  technique
+  colour
+  story
+  community
+}
+
+enum TextileSource {
+  procedural
+  scan
+}
+
+enum MediaKind {
+  scan
+  original
+  render
+  portrait
+  other
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  role         Role     @default(staff)
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+/// Object-storage pointer. Keys are content hashes → immutable URLs.
+model Media {
+  key         String    @id
+  contentType String
+  bytes       Int
+  kind        MediaKind
+  createdAt   DateTime  @default(now())
+
+  scans      Textile[] @relation("scan")
+  originals  Textile[] @relation("original")
+  renders    Render[]
+  portraits  Artisan[]
+}
+
+/// The digital record of one physical saree.
+model Textile {
+  id          String        @id @default(cuid())
+  source      TextileSource
+  spec        Json?         // parametric description (archive samples)
+  scanKey     String?
+  scan        Media?        @relation("scan", fields: [scanKey], references: [key])
+  originalKey String?       // untouched upload — never modified
+  original    Media?        @relation("original", fields: [originalKey], references: [key])
+  analysis    Json?         // colours, border ratio, pallu start, zari, pattern, crop
+  createdAt   DateTime      @default(now())
+  products    Product[]
+}
+
+/* ───────── reusable studio assets ───────── */
+
+model Mannequin {
+  id       String  @id // "ivory" | "graphite" | "stone"
+  label    String
+  modelKey String? // glTF in object storage when a scanned mannequin replaces the analytic one
+  drapes   Drape[]
+}
+
+model Pose {
+  id     String  @id // "classic" | "contrapposto" | "dressform"
+  label  String
+  drapes Drape[]
+}
+
+model LightingRig {
+  id     String  @id // "gallery" | "daylight" | "dusk" | "studio"
+  label  String
+  params Json
+  drapes Drape[]
+}
+
+model Environment {
+  id     String  @id
+  label  String
+  params Json
+  drapes Drape[]
+}
+
+/// How a product is presented: references shared studio assets only.
+model Drape {
+  id            String      @id @default(cuid())
+  style         String      // "nivi" | "seedha" | "open"
+  mannequinId   String
+  mannequin     Mannequin   @relation(fields: [mannequinId], references: [id])
+  poseId        String
+  pose          Pose        @relation(fields: [poseId], references: [id])
+  lightingId    String
+  lighting      LightingRig @relation(fields: [lightingId], references: [id])
+  environmentId String
+  environment   Environment @relation(fields: [environmentId], references: [id])
+  blouse        String?     // hex
+  product       Product?
+}
+
+model Render {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  view      String   // full | front | three-quarter | side | back | pallu | border | weave
+  mediaKey  String
+  media     Media    @relation(fields: [mediaKey], references: [key])
+  width     Int
+  height    Int
+  drapeHash String   // renders are invalidated when the drape changes
+  createdAt DateTime @default(now())
+
+  @@unique([productId, view, drapeHash])
+}
+
+/* ───────── catalogue ───────── */
+
+model Product {
+  id          String        @id @default(cuid())
+  number      Int           @unique @default(autoincrement())
+  slug        String        @unique
+  name        String
+  price       Int           // INR, whole rupees
+  fabric      String
+  weave       String
+  region      String
+  state       String
+  technique   String
+  colour      String
+  occasions   String[]
+  tags        String[]
+  lengthM     Decimal       @db.Decimal(4, 2)
+  widthM      Decimal       @db.Decimal(4, 2)
+  blousePieceM Decimal      @db.Decimal(4, 2)
+  weightG     Int
+  description String
+  story       String
+  care        String
+  seoTitle    String
+  seoDescription String
+  status      ProductStatus @default(draft)
+  views       Int           @default(0)
+
+  textileId String
+  textile   Textile  @relation(fields: [textileId], references: [id])
+  drapeId   String   @unique
+  drape     Drape    @relation(fields: [drapeId], references: [id])
+  artisanId String?
+  artisan   Artisan? @relation(fields: [artisanId], references: [id], onDelete: SetNull)
+
+  inventory   Inventory?
+  renders     Render[]
+  collections CollectionProduct[]
+  orderLines  OrderLine[]
+  stories     StoryProduct[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, state])
+  @@index([weave])
+}
+
+/// One-of-one by default. Sold pieces remain visible in the archive.
+model Inventory {
+  productId String            @id
+  product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku       String            @unique
+  model     InventoryModel    @default(unique)
+  quantity  Int               @default(1)
+  reserved  Int               @default(0)
+  state     AvailabilityState @default(available)
+  updatedAt DateTime          @updatedAt
+}
+
+model Collection {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  name           String
+  kind           CollectionKind
+  tagline        String
+  description    String
+  featured       Boolean        @default(false)
+  coverProductId String?
+  order          Int            @default(0)
+  products       CollectionProduct[]
+}
+
+model CollectionProduct {
+  collectionId String
+  productId    String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, productId])
+}
+
+model Artisan {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  community   String
+  region      String
+  state       String
+  tradition   String
+  techniques  String[]
+  since       Int
+  bio         String
+  story       String
+  quote       String
+  portraitKey String?
+  portrait    Media?   @relation(fields: [portraitKey], references: [key])
+  products    Product[]
+}
+
+/* ───────── commerce ───────── */
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  city      String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id         String      @id @default(cuid())
+  number     String      @unique
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  lines      OrderLine[]
+  subtotal   Int
+  shipping   Int
+  total      Int
+  status     OrderStatus @default(pending)
+  address    Json
+  note       String?
+  paymentRef String?     // gateway id, set by the verified webhook
+  createdAt  DateTime    @default(now())
+}
+
+model OrderLine {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String  // snapshot at purchase
+  price     Int     // snapshot at purchase
+  quantity  Int
+}
+
+/* ───────── content ───────── */
+
+model Story {
+  id        String         @id @default(cuid())
+  slug      String         @unique
+  title     String
+  kind      String         // craft | artisan | campaign
+  excerpt   String
+  body      String
+  published Boolean        @default(false)
+  products  StoryProduct[]
+}
+
+model StoryProduct {
+  storyId   String
+  productId String
+  story     Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([storyId, productId])
+}
+
+/// Homepage & editorial blocks, versioned so changes can be rolled back.
+model SiteContent {
+  id        Int      @id @default(autoincrement())
+  data      Json
+  createdAt DateTime @default(now())
+  authorId  String?
+}
+
+model StudioSettings {
+  id        Int      @id @default(1)
+  defaults  Json     // DrapeConfig
+  quality   String
+  views     String[]
+  updatedAt DateTime @updatedAt
+}

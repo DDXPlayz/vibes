@@ -111,6 +111,17 @@
   .heroFoot {
     flex-direction: column;
     align-items: stretch;
+    gap: var(--s-4);
+    bottom: 0;
+    padding-top: 64px;
+    padding-bottom: 28px;
+    background: linear-gradient(to bottom, transparent, var(--stage-b) 46%);
+  }
+  .capMeta {
+    display: none;
+  }
+  .tagline {
+    margin-bottom: var(--s-4);
   }
   .caption {
     text-align: left;

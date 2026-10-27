@@ -65,7 +65,7 @@ export function StudioCanvas({ item, mode, quality, className, beam, fallback }:
           frameloop={visible ? "always" : "never"}
           dpr={q === "draft" ? [1, 1.5] : [1, 2]}
           shadows={q === "high"}
-          gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+          gl={{ antialias: true, alpha: true, powerPreference: "high-performance", toneMapping: THREE.NeutralToneMapping }}
           camera={{ fov: 30, near: 0.05, far: 40, position: [0, 1, 3.9] }}
           style={{ animation: "fade-in 1600ms var(--ease-silk) both", touchAction: interactive ? "none" : "pan-y" }}
         >
@@ -77,7 +77,7 @@ export function StudioCanvas({ item, mode, quality, className, beam, fallback }:
 }
 
 function Rig({ first, item, mode, beam, quality }: { first: FabricTextures; item: Dressable; mode: StudioMode; beam?: boolean; quality: Quality }) {
-  const { scene, gl, camera, pointer } = useThree();
+  const { scene, gl, camera, pointer, size } = useThree();
   const { theme } = useTheme();
   const controls = useRef<CameraControls>(null);
   const studio = useMemo(() => {
@@ -187,10 +187,12 @@ function Rig({ first, item, mode, beam, quality }: { first: FabricTextures; item
       }
       // slow, front-weighted turn + a breath of parallax
       fig.rotation.y = Math.sin(t * 0.11) * 0.85;
+      // on portrait screens the figure stands higher and smaller, leaving room for the words
+      const portrait = size.width / size.height < 0.85;
       camera.position.x += (pointer.x * 0.2 - camera.position.x) * 0.02;
-      camera.position.y += (1.02 + pointer.y * 0.06 - camera.position.y) * 0.02;
-      camera.position.z = 5.1;
-      camera.lookAt(0, 0.84, 0);
+      camera.position.y += ((portrait ? 0.95 : 1.02) + pointer.y * 0.06 - camera.position.y) * 0.02;
+      camera.position.z = portrait ? 6.6 : 5.1;
+      camera.lookAt(0, portrait ? 0.45 : 0.84, 0);
     } else if (mode.kind === "scroll") {
       studio.drape.update(mode.progress.current ?? 0, t);
       fig.rotation.y = -0.35 + (mode.progress.current ?? 0) * 0.7 + Math.sin(t * 0.2) * 0.05;

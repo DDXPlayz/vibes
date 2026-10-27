@@ -37,14 +37,15 @@ export function fibreOf(spec?: TextileSpec) {
 
 export function jobKey(j: Omit<RenderJob, "key">) {
   const d = j.drape;
-  return [j.textile.id, j.view, j.theme, d.style, d.pose, d.mannequin, d.lighting, d.environment, j.width, j.height, j.transparent ? "t" : "o"].join("|");
+  return [j.textile.id, j.textile.scanUrl ?? "", j.blouse, j.fibre.sheen, j.fibre.sheer, j.quality ?? "", j.view, j.theme, d.style, d.pose, d.mannequin, d.lighting, d.environment, j.width, j.height, j.transparent ? "t" : "o"].join("|");
 }
 
 async function run(job: RenderJob): Promise<string> {
   const tex = await getTextures(job.textile, job.quality ?? "draft");
   if (!renderer) {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // Khronos PBR Neutral: built for product imagery — keeps the textile's true colour
+    renderer.toneMapping = THREE.NeutralToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setPixelRatio(1);

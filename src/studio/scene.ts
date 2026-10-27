@@ -133,9 +133,9 @@ export class FabricMaterial extends THREE.MeshPhysicalMaterial {
       metalness: 1,
       normalMap: weaveNormalMap(),
       normalScale: new THREE.Vector2(0.28, 0.28),
-      sheen: 0.12 + sheen * 0.3,
+      sheen: 0.08 + sheen * 0.22,
       sheenRoughness: 0.45 - sheen * 0.12,
-      sheenColor: new THREE.Color("#8a847c"),
+      sheenColor: new THREE.Color("#6f6a64"),
       side: THREE.DoubleSide,
       transparent: sheer > 0.05,
       opacity: 1 - sheer * 0.3,
@@ -225,7 +225,7 @@ float vibesNew(vec2 uv){
     this.needsUpdate = false;
   }
   setFibre(sheen: number, sheer: number) {
-    this.sheen = 0.12 + sheen * 0.3;
+    this.sheen = 0.08 + sheen * 0.22;
     this.sheenRoughness = 0.45 - sheen * 0.12;
     const transparent = sheer > 0.05;
     if (transparent !== this.transparent) {

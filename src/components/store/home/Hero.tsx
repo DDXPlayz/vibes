@@ -40,7 +40,7 @@ export function Hero({ content, sequence }: { content: SiteContent["hero"]; sequ
         <Link href={`/saree/${cur.slug}`} className={styles.caption} key={cur.id}>
           <span className="num">No. {num(cur.number)}</span>
           <span className={styles.capName}>{cur.name}</span>
-          <span className={styles.capSub}>
+          <span className={`${styles.capSub} ${styles.capMeta}`}>
             {cur.weave} · {cur.region}
             {cur.artisan ? ` · ${cur.artisan.name}` : ""}
           </span>

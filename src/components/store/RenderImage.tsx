@@ -15,8 +15,12 @@ type Renderable = Pick<ProductView, "name" | "textile" | "fibre" | "blouse" | "d
  */
 export function RenderImage({ product, view, width, height, className, priority }: { product: Renderable; view: ViewId; width: number; height: number; className?: string; priority?: boolean }) {
   const { theme } = useTheme();
-  const stored = product.renders.find((r) => r.view === view)?.url;
+  // stored renders are lit for the light gallery; dark mode renders live (cached)
+  const stored = theme === "light" ? product.renders.find((r) => r.view === view)?.url : undefined;
   const [url, setUrl] = useState<string | null>(stored ?? null);
+  useEffect(() => {
+    if (stored) setUrl(stored);
+  }, [stored]);
   const [failed, setFailed] = useState(false);
   const [near, setNear] = useState(!!priority);
   const ref = useRef<HTMLImageElement>(null);

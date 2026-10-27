@@ -50,7 +50,7 @@ export function Gallery3D({ products }: { products: ProductView[] }) {
       onPointerUp={() => (drag.current = null)}
       onPointerLeave={() => (drag.current = null)}
     >
-      <Canvas dpr={[1, 1.6]} camera={{ fov: 32, position: [0, 1.15, 4.6] }} gl={{ antialias: true, alpha: true }}>
+      <Canvas dpr={[1, 1.6]} camera={{ fov: 32, position: [0, 1.15, 4.6] }} gl={{ antialias: true, alpha: true, toneMapping: THREE.NeutralToneMapping }}>
         <Room products={products} target={target} />
       </Canvas>
       <div className="label" style={{ position: "absolute", top: 16, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
