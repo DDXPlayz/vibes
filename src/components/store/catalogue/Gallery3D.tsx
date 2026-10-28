@@ -115,7 +115,9 @@ function Room({ products, target }: { products: ProductView[]; target: React.Ref
     });
   }, [figures, theme]);
 
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
+    // drapes arrive from their bakes asynchronously; update() is a no-op once settled
+    figures.forEach((f) => f.rig.update(1, state.clock.elapsedTime, 0));
     const x = camera.position.x + (target.current - camera.position.x) * Math.min(1, dt * 3);
     camera.position.x = x;
     camera.lookAt(x, 0.88, 0);

@@ -7,6 +7,7 @@ import * as THREE from "three";
 import { useTheme } from "@/hooks/useTheme";
 import type { DrapeConfig, LightingId, TextileRef, ViewId } from "@/lib/types";
 import { getTextures, defaultQuality, hasWebGL, type Quality } from "@/studio/registry";
+import { loadBake } from "@/studio/drapes";
 import { Studio, viewCamera, type FabricTextures } from "@/studio/scene";
 
 export interface Dressable {
@@ -40,10 +41,12 @@ export function StudioCanvas({ item, mode, quality, className, beam, fallback }:
   useEffect(() => setWebgl(hasWebGL()), []);
   useEffect(() => {
     let live = true;
-    getTextures(item.textile, q).then((t) => live && setTex(t));
+    // the simulated drape and the textile arrive together, so the first frame is already the real drape
+    Promise.all([getTextures(item.textile, q), loadBake(item.drape.style, item.drape.pose).catch(() => null)]).then(([t]) => live && setTex(t));
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.textile, q]);
   useEffect(() => {
     const el = box.current;
@@ -64,7 +67,7 @@ export function StudioCanvas({ item, mode, quality, className, beam, fallback }:
         <Canvas
           frameloop={visible ? "always" : "never"}
           dpr={q === "draft" ? [1, 1.5] : [1, 2]}
-          shadows={q === "high"}
+          shadows={q !== "draft"}
           gl={{ antialias: true, alpha: true, powerPreference: "high-performance", toneMapping: THREE.NeutralToneMapping }}
           camera={{ fov: 30, near: 0.05, far: 40, position: [0, 1, 3.9] }}
           style={{ animation: "fade-in 1600ms var(--ease-silk) both", touchAction: interactive ? "none" : "pan-y" }}
@@ -81,7 +84,7 @@ function Rig({ first, item, mode, beam, quality }: { first: FabricTextures; item
   const { theme } = useTheme();
   const controls = useRef<CameraControls>(null);
   const studio = useMemo(() => {
-    const s = new Studio(first, item.drape, { scene, transparentBackground: true, beam, shadows: quality === "high" });
+    const s = new Studio(first, item.drape, { scene, transparentBackground: true, beam, shadows: quality !== "draft" });
     s.setBlouse(item.blouse);
     s.fabric.setFibre(item.fibre.sheen, item.fibre.sheer);
     s.drape.update(mode.kind === "viewer" || mode.kind === "preview" ? 1 : 0, 0);

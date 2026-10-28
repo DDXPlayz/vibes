@@ -26,21 +26,24 @@ previews — is derived from those two references by the same code
 
 | File | Responsibility |
 |---|---|
-| `body.ts` | The mannequin defined analytically (half-width / half-depth curves per height). The same functions build the mesh **and** act as the drape's collision envelope — fabric is pushed outside the body and arms, so it never intersects, without a physics solver. Poses: classic, contrapposto, dress form. |
-| `drape.ts` | `DrapeRig`: two parametric surfaces — the pleated skirt and the pallu ribbon — driven by a single `progress` (0 = bare, 1 = settled). Drape styles (Nivi, open pallu, Seedha) are *data*: a centreline with width and fold keys. The textile is mapped 1:1 onto the flat saree length (skirt 0–40%, pleats 40–56%, pallu 56–100%), so the real border, body and pallu land where they would on a real drape. |
+| `body.ts` | The mannequin defined analytically — torso cross-sections with bust, lower belly and seat, tapered legs with a relaxed knee, feet, arms, shoulder caps. Poses (classic, contrapposto, dress form) shift weight onto one leg. The same description builds the mesh **and** the colliders, so cloth rests exactly on the visible body. |
+| `cloth.ts` | A position-based cloth solver: distance constraints with separate stretch / compression stiffness (cloth barely stretches, gathers easily), bending, long-range tethers, and Coulomb-style friction against the body. No DOM, no three.js. |
+| `collider.ts` | The body as the cloth feels it: the torso pushed out along its true surface normal (so fabric rests *on* a sloping shoulder), tapered capsules for limbs and feet, the floor — and a radius map of the finished skirt so the pallu lies on it. |
+| `drapeBake.ts` | Builds and simulates a drape. The skirt is a straight rectangle of fabric (≈1 m, just over hip girth) tucked into a shorter waistline, so it gathers at the tuck, skims hips and seat and falls under gravity; below the hips it may only fold, never shrink. Seven hand-made pleats of slightly different depth are pressed into a crease memory, tight at the tuck and fanning toward a hem that pools on the feet. The pallu is pinned only where a real one is — the waist, a brooch on the shoulder, and (Seedha) the left waist — and settles snug across the bust and down the shoulder blade. Ambient occlusion for fold valleys and contact is baked in. |
+| `drape.ts` | `DrapeRig` plays a baked drape: the drape-in animation, a one-sided pallu sway (always away from the body, so it needs no runtime collision) and the woven transition all start from the simulated cloth. Textiles are mapped at true physical scale along the 5.5 m saree. |
+| `drapes.ts`, `public/drapes/*.bin` | Nine bakes (3 drape styles × 3 poses, ~117 KB each, quantised). A bake never depends on the textile, so nine files serve every saree. Rebuild with `npm run bake` (≈50 s each). |
 | `textile.ts` | Builds the two surfaces the material needs: colour, and a material mask (G = roughness, B = metalness for zari). For scans the photo is used as-is; only the mask is derived (gold-thread detection). |
 | `scan.ts` | Textile processing on upload: background separation → crop → orient (length horizontal, pallu at the end, rotating rather than mirroring when possible) → border and pallu detection → k-means dominant colours → zari coverage → pattern estimate. Every detection can be overridden by the admin. |
-| `scene.ts` | `Studio`: the reusable scene — mannequin, drape, lights, floor, optional light beam. `FabricMaterial` extends `MeshPhysicalMaterial` with sheen, a woven normal map and a shader-level *woven transition* (a gold thread rises from the hem and re-weaves one saree into the next). Tone mapping is Khronos PBR Neutral for colour fidelity. |
-| `renderFarm.ts` | One hidden renderer + one `Studio` producing stills of any saree from any camera, queued and cached. Used for product cards, the admin “Generate” step and stored renders. The same module can run headless (Puppeteer/Playwright worker) to write renders to object storage at publish time. |
+| `scene.ts` | `Studio`: the reusable scene — mannequin, drape, lights (soft shadows at standard quality and up), floor, optional light beam. `FabricMaterial` extends `MeshPhysicalMaterial` with sheen, a woven normal map, baked AO via vertex colour, and a shader-level *woven transition*. Tone mapping is Khronos PBR Neutral for colour fidelity. |
+| `renderFarm.ts` | One hidden renderer + one `Studio` producing stills of any saree from any camera, queued and cached. Waits for the drape bake before rendering. |
 | `registry.ts` | Shared cache of decoded textiles and GPU textures, and device-quality selection. |
 
-**Why procedural rather than real-time cloth simulation?** A 5.5 m silk
-simulation is too heavy for phones and non-deterministic between renders. The
-rig is deterministic (identical renders every time), runs at 60 fps, and its
-envelope projection gives physically plausible contact. The `DrapeRig`
-interface (`update(progress, time)`) is the seam where an offline
-cloth-simulation bake (e.g. Marvelous Designer / Houdini Vellum → vertex
-cache) can replace the procedural surfaces for flagship pieces.
+**Why bake rather than simulate live?** A 5.5 m silk simulation takes tens of
+seconds and is not perfectly repeatable; baking once per style × pose gives
+identical, physically settled cloth on every device at 60 fps. Self-collision
+is not simulated; the two places it matters (the inner wrap under the pleats,
+and fold order within the pleats) are handled by a layer constraint and a
+pressed-crease memory.
 
 **Hybrid presentation.** The product page is real-time 3D; cards, search and
 the archive use stored or cached renders. Without WebGL every image falls back

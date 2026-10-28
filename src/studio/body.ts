@@ -9,7 +9,7 @@ import type { MannequinId, PoseId } from "@/lib/types";
  * Units are metres. Floor is y = 0. The figure faces +z; her left is +x.
  */
 
-const smooth = (a: number, b: number, t: number) => {
+export const smooth = (a: number, b: number, t: number) => {
   const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
   return x * x * (3 - 2 * x);
 };
@@ -75,14 +75,30 @@ export function bodyRz(y: number) {
 export function bustBulge(y: number) {
   return 0.028 * smooth(1.18, 1.27, y) * (1 - smooth(1.31, 1.4, y));
 }
+/** The seat: a soft rounded bulge low on the back — what the skirt drapes over. */
+export function seatBulge(y: number) {
+  return 0.036 * smooth(0.76, 0.88, y) * (1 - smooth(0.93, 1.03, y));
+}
+/** A gentle lower-belly curve below the navel. */
+export function bellyBulge(y: number) {
+  return 0.012 * smooth(0.86, 0.94, y) * (1 - smooth(0.98, 1.05, y));
+}
+
+/** Half-depth of the torso in direction θ, including bust, belly and seat. */
+export function torsoRz(y: number, theta: number) {
+  const c = Math.cos(theta);
+  const front = Math.max(0, c);
+  const back = Math.max(0, -c);
+  // the seat is two rounded forms, fuller off-centre than on the spine
+  const seat = seatBulge(y) * back * back * (0.75 + 0.25 * Math.abs(Math.sin(theta * 2)));
+  return bodyRz(y) + (bustBulge(y) + bellyBulge(y)) * front * front + seat;
+}
 
 /** Point on the torso surface for height y, angle θ (0 = front, +π/2 = her left). */
 export function torsoPoint(y: number, theta: number, offset = 0, out = new THREE.Vector3()) {
   const s = Math.sin(theta);
   const c = Math.cos(theta);
-  const front = Math.max(0, c);
-  const rz = bodyRz(y) + bustBulge(y) * front * front;
-  return out.set(s * (bodyRx(y) + offset), y, c * (rz + offset) + 0.0);
+  return out.set(s * (bodyRx(y) + offset), y, c * (torsoRz(y, theta) + offset));
 }
 
 /* ───────────── skirt envelope (the pleated lower drape) ───────────── */
@@ -132,11 +148,37 @@ export const MANNEQUIN_FINISHES: Record<MannequinId, { label: string; light: str
   graphite: { label: "Graphite satin", light: "#4a4541", dark: "#2b2826", roughness: 0.42 },
 };
 
-export const POSES: Record<PoseId, { label: string; arms: boolean; head: boolean; headTilt: number; armL: number; armR: number; hipShift: number }> = {
-  classic: { label: "Classic", arms: true, head: true, headTilt: 0.04, armL: 0.13, armR: 0.13, hipShift: 0 },
-  contrapposto: { label: "Contrapposto", arms: true, head: true, headTilt: -0.09, armL: 0.08, armR: 0.24, hipShift: 0.012 },
-  dressform: { label: "Dress form", arms: false, head: false, headTilt: 0, armL: 0, armR: 0, hipShift: 0 },
+/**
+ * Poses. `kneeL/kneeR` push a knee forward (a relaxed, weight-free leg),
+ * `footL/footR` turn the foot out — real women rarely stand symmetrically,
+ * and the drape reads that through the fabric.
+ */
+export const POSES: Record<PoseId, { label: string; arms: boolean; head: boolean; headTilt: number; armL: number; armR: number; hipShift: number; kneeL: number; kneeR: number; footL: number; footR: number; stance: number }> = {
+  classic: { label: "Classic", arms: true, head: true, headTilt: 0.04, armL: 0.13, armR: 0.13, hipShift: 0, kneeL: 0.028, kneeR: 0.004, footL: 0.28, footR: 0.12, stance: 0.07 },
+  contrapposto: { label: "Contrapposto", arms: true, head: true, headTilt: -0.09, armL: 0.08, armR: 0.24, hipShift: 0.012, kneeL: 0.06, kneeR: 0, footL: 0.45, footR: 0.1, stance: 0.06 },
+  dressform: { label: "Dress form", arms: false, head: false, headTilt: 0, armL: 0, armR: 0, hipShift: 0, kneeL: 0.012, kneeR: 0.012, footL: 0.15, footR: 0.15, stance: 0.07 },
 };
+
+/** Hip, knee, ankle and toe for each leg (her left = +x). */
+export function legJoints(pose: PoseId) {
+  const p = POSES[pose];
+  return [1, -1].map((side) => {
+    const knee = side > 0 ? p.kneeL : p.kneeR;
+    const turn = side > 0 ? p.footL : p.footR;
+    // a relaxed leg brings the knee forward and slightly inward, the heel a touch higher
+    const hip = new THREE.Vector3(side * 0.088, 0.86, -0.006);
+    const kneeP = new THREE.Vector3(side * (0.075 - knee * 0.35), 0.47 - knee * 0.15, 0.012 + knee);
+    const ankle = new THREE.Vector3(side * (p.stance - knee * 0.25), 0.075 + knee * 0.3, -0.012 + knee * 0.2);
+    const toe = ankle.clone().add(new THREE.Vector3(side * Math.sin(turn) * 0.12, -0.05 - knee * 0.25, Math.cos(turn) * 0.12));
+    return { side, hip, knee: kneeP, ankle, toe };
+  });
+}
+
+/** Shoulder caps — rounded deltoids the pallu rests over. */
+export function shoulderCaps(pose: PoseId) {
+  if (!POSES[pose].arms) return [new THREE.Vector3(0.15, 1.442, -0.004), new THREE.Vector3(-0.15, 1.442, -0.004)];
+  return [new THREE.Vector3(0.162, 1.448, -0.004), new THREE.Vector3(-0.162, 1.448, -0.004)];
+}
 
 export function armJoints(pose: PoseId) {
   const p = POSES[pose];
@@ -168,16 +210,17 @@ export function pushOutsideCapsule(p: THREE.Vector3, a: THREE.Vector3, b: THREE.
   return p;
 }
 
-function torsoGeometry(y0: number, y1: number, offset: number, rings = 72, segs = 72) {
+function torsoGeometry(y0: number, y1: number | ((theta: number) => number), offset: number, rings = 72, segs = 72) {
   const geo = new THREE.BufferGeometry();
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];
   const v = new THREE.Vector3();
   for (let i = 0; i <= rings; i++) {
-    const y = y0 + ((y1 - y0) * i) / rings;
     for (let j = 0; j <= segs; j++) {
       const th = (j / segs) * Math.PI * 2;
+      const top = typeof y1 === "number" ? y1 : y1(th);
+      const y = y0 + ((top - y0) * i) / rings;
       torsoPoint(y, th, offset, v);
       pos.push(v.x, v.y, v.z);
       uv.push(j / segs, i / rings);
@@ -237,16 +280,27 @@ export function createMannequin(pose: PoseId = "classic"): MannequinParts {
   // torso: legs are implied beneath the skirt; torso continues under the skirt
   const torso = new THREE.Mesh(torsoGeometry(BODY.torsoBottom, 1.54, 0), skin);
   group.add(torso);
-  // blouse — a fitted band from under-bust to shoulder
-  const blouseMesh = new THREE.Mesh(torsoGeometry(1.205, 1.505, 0.004, 44, 72), blouse);
+  // blouse — fitted from under the bust over the shoulders, with a soft scooped neckline
+  const neckline = (th: number) => {
+    const c = Math.cos(th);
+    const front = Math.max(0, c);
+    const back = Math.max(0, -c);
+    const side = Math.abs(Math.sin(th));
+    return 1.535 - 0.085 * front ** 1.6 - 0.05 * back ** 2 - 0.004 * side;
+  };
+  const blouseMesh = new THREE.Mesh(torsoGeometry(1.205, neckline, 0.004, 52, 96), blouse);
   group.add(blouseMesh);
 
-  // legs (only visible if the skirt is absent, e.g. during the drape intro)
-  const legL = limb(new THREE.Vector3(0.085, 0.86, 0), new THREE.Vector3(0.07, 0.06, 0.01), 0.085, 0.045);
-  const legR = limb(new THREE.Vector3(-0.085, 0.86, 0), new THREE.Vector3(-0.07, 0.06, 0.01), 0.085, 0.045);
-  legL.material = skin;
-  legR.material = skin;
-  group.add(legL, legR);
+  // legs and feet — the drape falls over these, and the toes peep out beneath the pleats
+  for (const l of legJoints(pose)) {
+    const thigh = limb(l.hip, l.knee, 0.088, 0.056);
+    const calf = limb(l.knee, l.ankle, 0.056, 0.034);
+    const foot = limb(l.ankle.clone().add(new THREE.Vector3(0, 0.005, -0.03)), l.toe, 0.034, 0.022);
+    for (const m of [thigh, calf, foot]) {
+      m.material = skin;
+      group.add(m);
+    }
+  }
 
   if (p.head) {
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.046, 0.12, 32), skin);

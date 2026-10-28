@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import type { DrapeConfig, TextileRef, TextileSpec, ViewId } from "@/lib/types";
 import { Studio, viewCamera, type Theme } from "./scene";
+import { loadBake } from "./drapes";
 import { getTextures, hasWebGL, type Quality } from "./registry";
 
 /**
@@ -41,7 +42,7 @@ export function jobKey(j: Omit<RenderJob, "key">) {
 }
 
 async function run(job: RenderJob): Promise<string> {
-  const tex = await getTextures(job.textile, job.quality ?? "draft");
+  const [tex] = await Promise.all([getTextures(job.textile, job.quality ?? "draft"), loadBake(job.drape.style, job.drape.pose).catch(() => null)]);
   if (!renderer) {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     // Khronos PBR Neutral: built for product imagery — keeps the textile's true colour
@@ -49,9 +50,11 @@ async function run(job: RenderJob): Promise<string> {
     renderer.toneMappingExposure = 1.0;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   }
   if (!studio) {
-    studio = new Studio(tex, job.drape, { transparentBackground: false });
+    studio = new Studio(tex, job.drape, { transparentBackground: false, shadows: true });
     studio.attachRenderer(renderer);
   }
   const s = studio;

@@ -1,103 +1,34 @@
 import * as THREE from "three";
 import type { DrapeStyleId, PoseId } from "@/lib/types";
-import { SKIRT, armJoints, pushOutside, pushOutsideCapsule, skirtRx, skirtRz } from "./body";
+import { PA_NS, PA_NT, SK_NU, SK_NV, WAIST_Y, WRAP_COLS, initialDrape, palluUV, skirtLayout, skirtUV, type DrapeBake } from "./drapeBake";
+import { getBakeSync, loadBake } from "./drapes";
 
 /**
  * The digital drape.
  *
- * Real-time cloth simulation of 5.5 m of silk is too expensive for a
- * storefront, so the drape is a *procedural rig*: two parametric surfaces
- * (the pleated skirt and the pallu) that are shaped by the analytic body
- * envelope and animated by a single `progress` value. The textile texture is
- * mapped 1:1 onto the flat saree length, so the physical saree's colour,
- * border, motifs and pallu land exactly where they would on a real drape —
- * nothing is redesigned.
+ * The cloth is simulated offline (src/studio/drapeBake.ts) — gravity, the
+ * body, friction, a rectangle of fabric gathered at the tuck — once per drape
+ * style × pose. At runtime the rig *plays* that settled cloth: the drape-in
+ * animation, the woven transition and a soft pallu sway all start from the
+ * simulated shape, so what you see at rest is the physics, not a formula.
  *
- * Saree texture layout (u along length, v across width):
- *   u 0.00–0.40  skirt wrap
- *   u 0.40–0.56  front pleats
- *   u 0.56–1.00  pallu (decorated end panel starts ≈ 0.78)
+ * The textile is mapped at true physical scale along the saree's length, so
+ * the real saree's border, body and pallu land exactly where they would.
  */
 
-export const U_SKIRT_END = 0.4;
-export const U_PLEAT_END = 0.56;
+export const DRAPE_STYLES: Record<DrapeStyleId, { label: string; note: string }> = {
+  nivi: { label: "Nivi", note: "Pleated pallu over the left shoulder, falling behind." },
+  open: { label: "Open pallu", note: "Unpleated pallu spread across the bodice, falling long." },
+  seedha: { label: "Seedha pallu", note: "Pallu brought from the back over the right shoulder, displayed in front." },
+};
 
 const smooth = (a: number, b: number, t: number) => {
   const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
   return x * x * (3 - 2 * x);
 };
-const tri = (x: number) => 1 - 2 * Math.abs((x - Math.floor(x)) - 0.5);
 
-interface PathKey {
-  p: [number, number, number];
-  /** Approximate width direction of the fabric at this point. */
-  b: [number, number, number];
-  w: number;
-  fold: number;
-  folds: number;
-}
-
-/** Each drape style is just data: a centreline for the pallu. */
-export const DRAPE_STYLES: Record<DrapeStyleId, { label: string; note: string; keys: PathKey[]; shoulderS: number }> = {
-  nivi: {
-    label: "Nivi",
-    note: "Pleated pallu over the left shoulder, falling behind.",
-    shoulderS: 0.42,
-    keys: [
-      { p: [-0.175, 1.0, 0.09], b: [0.5, -0.86, 0], w: 0.2, fold: 0.006, folds: 7 },
-      { p: [-0.11, 1.1, 0.15], b: [0.6, -0.8, 0], w: 0.17, fold: 0.008, folds: 7 },
-      { p: [-0.01, 1.22, 0.16], b: [0.75, -0.66, 0], w: 0.16, fold: 0.008, folds: 7 },
-      { p: [0.09, 1.36, 0.14], b: [0.86, -0.5, 0], w: 0.15, fold: 0.008, folds: 7 },
-      { p: [0.145, 1.47, 0.06], b: [0.95, -0.3, 0], w: 0.14, fold: 0.007, folds: 6 },
-      { p: [0.155, 1.512, -0.02], b: [0.96, -0.28, 0], w: 0.15, fold: 0.006, folds: 6 },
-      { p: [0.16, 1.45, -0.115], b: [1, -0.05, -0.05], w: 0.22, fold: 0.008, folds: 6 },
-      { p: [0.17, 1.22, -0.15], b: [1, 0, -0.1], w: 0.36, fold: 0.012, folds: 5 },
-      { p: [0.18, 0.92, -0.2], b: [1, 0, -0.12], w: 0.46, fold: 0.016, folds: 5 },
-      { p: [0.185, 0.6, -0.24], b: [1, 0, -0.14], w: 0.52, fold: 0.02, folds: 5 },
-    ],
-  },
-  open: {
-    label: "Open pallu",
-    note: "Unpleated pallu spread across the bodice, falling long.",
-    shoulderS: 0.44,
-    keys: [
-      { p: [-0.17, 1.0, 0.1], b: [0.5, -0.86, 0], w: 0.3, fold: 0.006, folds: 4 },
-      { p: [-0.08, 1.12, 0.16], b: [0.6, -0.8, 0], w: 0.36, fold: 0.008, folds: 4 },
-      { p: [0.02, 1.26, 0.165], b: [0.75, -0.66, 0], w: 0.36, fold: 0.008, folds: 4 },
-      { p: [0.1, 1.39, 0.12], b: [0.88, -0.48, 0], w: 0.3, fold: 0.008, folds: 4 },
-      { p: [0.16, 1.512, -0.01], b: [0.96, -0.28, 0], w: 0.22, fold: 0.006, folds: 5 },
-      { p: [0.18, 1.44, -0.12], b: [1, -0.1, -0.1], w: 0.3, fold: 0.01, folds: 5 },
-      { p: [0.2, 1.15, -0.16], b: [1, 0, -0.12], w: 0.48, fold: 0.016, folds: 5 },
-      { p: [0.21, 0.75, -0.21], b: [1, 0, -0.14], w: 0.56, fold: 0.02, folds: 5 },
-      { p: [0.215, 0.36, -0.25], b: [1, 0, -0.15], w: 0.6, fold: 0.024, folds: 5 },
-    ],
-  },
-  seedha: {
-    label: "Seedha pallu",
-    note: "Pallu brought from the back over the right shoulder, displayed in front.",
-    shoulderS: 0.42,
-    keys: [
-      { p: [0.17, 1.0, -0.08], b: [-0.5, -0.86, 0], w: 0.2, fold: 0.006, folds: 6 },
-      { p: [0.08, 1.15, -0.13], b: [-0.6, -0.8, 0], w: 0.17, fold: 0.008, folds: 6 },
-      { p: [-0.04, 1.3, -0.12], b: [-0.8, -0.6, 0], w: 0.16, fold: 0.008, folds: 6 },
-      { p: [-0.14, 1.45, -0.06], b: [-0.95, -0.3, 0], w: 0.15, fold: 0.007, folds: 6 },
-      { p: [-0.155, 1.512, 0.02], b: [-0.96, -0.28, 0], w: 0.16, fold: 0.006, folds: 6 },
-      { p: [-0.13, 1.42, 0.14], b: [-1, -0.05, 0.12], w: 0.26, fold: 0.008, folds: 5 },
-      { p: [-0.08, 1.2, 0.2], b: [-1, 0, 0.2], w: 0.42, fold: 0.012, folds: 5 },
-      { p: [-0.04, 0.92, 0.23], b: [-1, 0, 0.12], w: 0.5, fold: 0.016, folds: 5 },
-      { p: [-0.02, 0.62, 0.27], b: [-1, 0, 0.1], w: 0.54, fold: 0.018, folds: 5 },
-    ],
-  },
-};
-
-const SK_U = 220;
-const SK_V = 64;
-const PA_S = 170;
-const PA_T = 30;
-
-const THETA_START = 0.25;
-const SPAN = Math.PI * 2 + 0.42; // the pleats overlap the tucked-in start
-const PLEAT_FRAC = 1 - 0.8 / SPAN;
+const LAYOUT = skirtLayout();
+const SKIRT_UV = skirtUV(LAYOUT);
 
 export class DrapeRig {
   readonly group = new THREE.Group();
@@ -106,43 +37,41 @@ export class DrapeRig {
   progress = 1;
   private style: DrapeStyleId;
   private pose: PoseId;
-  private centre: THREE.Vector3[] = [];
-  private tangent: THREE.Vector3[] = [];
-  private across: THREE.Vector3[] = [];
-  private normal: THREE.Vector3[] = [];
-  private width: number[] = [];
-  private foldAmp: number[] = [];
-  private foldN: number[] = [];
-  private arms: { a: THREE.Vector3; b: THREE.Vector3; r: number }[] = [];
+  private bake!: DrapeBake;
+  private pleatFlat = new Float32Array(0);
+  private pivot = new THREE.Vector3();
   private lastKey = "";
+  private lastPallu = "";
 
   constructor(material: THREE.Material, style: DrapeStyleId = "nivi", pose: PoseId = "classic") {
     this.style = style;
     this.pose = pose;
-    this.skirt = new THREE.Mesh(grid(SK_U, SK_V), material);
-    this.pallu = new THREE.Mesh(grid(PA_S, PA_T), material);
+    this.skirt = new THREE.Mesh(grid(SK_NU, SK_NV), material);
+    this.pallu = new THREE.Mesh(grid(PA_NS, PA_NT), material);
     this.skirt.name = "skirt";
     this.pallu.name = "pallu";
+    (this.skirt.geometry.getAttribute("uv") as THREE.BufferAttribute).set(SKIRT_UV);
     for (const m of [this.skirt, this.pallu]) {
       m.castShadow = true;
       m.receiveShadow = true;
       m.frustumCulled = false;
     }
-    this.writeSkirtUVs();
-    this.writePalluUVs();
     this.group.add(this.skirt, this.pallu);
     this.configure(style, pose);
   }
 
+  /** Switch style/pose. Uses a baked drape when loaded, the unsimulated shape until then. */
   configure(style: DrapeStyleId, pose: PoseId) {
     this.style = style;
     this.pose = pose;
-    this.arms = armJoints(pose).flatMap((j) => [
-      { a: j.sh, b: j.elbow, r: 0.062 },
-      { a: j.elbow, b: j.wrist, r: 0.045 },
-    ]);
-    this.buildPath();
-    this.lastKey = "";
+    const ready = getBakeSync(style, pose);
+    this.apply(ready ?? initialDrape(style, pose));
+    if (!ready)
+      loadBake(style, pose)
+        .then((b) => {
+          if (this.style === style && this.pose === pose) this.apply(b);
+        })
+        .catch(() => undefined);
   }
 
   setMaterial(material: THREE.Material) {
@@ -150,172 +79,146 @@ export class DrapeRig {
     this.pallu.material = material;
   }
 
-  private buildPath() {
-    const def = DRAPE_STYLES[this.style];
-    const pts = def.keys.map((k) => new THREE.Vector3(...k.p));
-    const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal");
-    // key positions as cumulative chord fractions
-    const chord = [0];
-    for (let i = 1; i < pts.length; i++) chord.push(chord[i - 1] + pts[i].distanceTo(pts[i - 1]));
-    const total = chord[chord.length - 1];
-    const kf = chord.map((c) => c / total);
-    const lerpKey = (s: number, f: (k: PathKey) => number) => {
-      for (let i = 1; i < kf.length; i++) {
-        if (s <= kf[i]) {
-          const t = (s - kf[i - 1]) / (kf[i] - kf[i - 1]);
-          const e = t * t * (3 - 2 * t);
-          return f(def.keys[i - 1]) * (1 - e) + f(def.keys[i]) * e;
-        }
-      }
-      return f(def.keys[def.keys.length - 1]);
-    };
-    this.centre = [];
-    this.tangent = [];
-    this.across = [];
-    this.normal = [];
-    this.width = [];
-    this.foldAmp = [];
-    this.foldN = [];
-    for (let i = 0; i <= PA_S; i++) {
-      const s = i / PA_S;
-      const c = curve.getPointAt(s);
-      const t = curve.getTangentAt(s).normalize();
-      const b0 = new THREE.Vector3(lerpKey(s, (k) => k.b[0]), lerpKey(s, (k) => k.b[1]), lerpKey(s, (k) => k.b[2]));
-      const b = b0.sub(t.clone().multiplyScalar(b0.dot(t))).normalize();
-      const n = new THREE.Vector3().crossVectors(t, b).normalize();
-      if (n.x * c.x + n.z * c.z < 0) n.negate();
-      this.centre.push(c);
-      this.tangent.push(t);
-      this.across.push(b);
-      this.normal.push(n);
-      this.width.push(lerpKey(s, (k) => k.w));
-      this.foldAmp.push(lerpKey(s, (k) => k.fold));
-      this.foldN.push(lerpKey(s, (k) => k.folds));
-    }
-  }
-
-  private writeSkirtUVs() {
-    const uv = this.skirt.geometry.getAttribute("uv") as THREE.BufferAttribute;
-    for (let i = 0; i <= SK_V; i++) {
-      for (let j = 0; j <= SK_U; j++) {
-        const f = j / SK_U;
-        const u = f < PLEAT_FRAC ? (f / PLEAT_FRAC) * U_SKIRT_END : U_SKIRT_END + ((f - PLEAT_FRAC) / (1 - PLEAT_FRAC)) * (U_PLEAT_END - U_SKIRT_END);
-        // the top ~12% of the width is tucked into the waist, so the upper border is hidden
-        uv.setXY(i * (SK_U + 1) + j, u, (i / SK_V) * 0.88);
-      }
-    }
-    uv.needsUpdate = true;
-  }
-
-  private writePalluUVs() {
+  private apply(b: DrapeBake) {
+    this.bake = b;
     const uv = this.pallu.geometry.getAttribute("uv") as THREE.BufferAttribute;
-    for (let k = 0; k <= PA_T; k++) {
-      for (let i = 0; i <= PA_S; i++) {
-        uv.setXY(k * (PA_S + 1) + i, U_PLEAT_END + (i / PA_S) * (1 - U_PLEAT_END), k / PA_T);
-      }
-    }
+    uv.set(palluUV(b.palluLength));
     uv.needsUpdate = true;
+    setAO(this.skirt.geometry, b.skirtAO);
+    setAO(this.pallu.geometry, b.palluAO);
+    // the pleats before they are formed: the same cloth, smoothed flat across each pleat
+    const flat = new Float32Array(b.skirt);
+    const W = 4;
+    for (let i = 0; i <= SK_NV; i++)
+      for (let j = WRAP_COLS; j <= SK_NU; j++) {
+        const acc = [0, 0, 0];
+        let n = 0;
+        for (let q = -W; q <= W; q++) {
+          const jj = Math.min(SK_NU, Math.max(WRAP_COLS - 2, j + q));
+          const o = (i * (SK_NU + 1) + jj) * 3;
+          acc[0] += b.skirt[o];
+          acc[1] += b.skirt[o + 1];
+          acc[2] += b.skirt[o + 2];
+          n++;
+        }
+        const o = (i * (SK_NU + 1) + j) * 3;
+        flat[o] = acc[0] / n;
+        flat[o + 1] = acc[1] / n;
+        flat[o + 2] = acc[2] / n;
+      }
+    this.pleatFlat = flat;
+    // the shoulder pin is the pivot the pallu falls from
+    const p = this.pivot.set(0, 0, 0);
+    for (let k = 0; k <= PA_NT; k++) {
+      const o = (k * (PA_NS + 1) + b.shoulderI) * 3;
+      p.x += b.pallu[o];
+      p.y += b.pallu[o + 1];
+      p.z += b.pallu[o + 2];
+    }
+    p.multiplyScalar(1 / (PA_NT + 1));
+    this.lastKey = "";
+    this.lastPallu = "";
   }
 
   /**
    * progress: 0 = bare mannequin, 1 = fully draped and settled.
-   * time: seconds, used for the gentle idle sway of the pallu.
+   * time: seconds, for the gentle sway of the pallu. sway = 0 holds it still.
    */
   update(progress: number, time: number, sway = 1) {
     const p = Math.min(1, Math.max(0, progress));
     const key = `${p.toFixed(4)}|${this.style}|${this.pose}`;
-    const skirtDirty = key !== this.lastKey;
+    if (key !== this.lastKey) this.updateSkirt(p);
+    const pk = `${key}|${sway ? time.toFixed(2) : "still"}`;
+    if (pk !== this.lastPallu) this.updatePallu(p, time, sway);
     this.lastKey = key;
-    if (skirtDirty) this.updateSkirt(p);
-    this.updatePallu(p, time, sway);
+    this.lastPallu = pk;
     this.progress = p;
   }
 
   private updateSkirt(p: number) {
     const geo = this.skirt.geometry;
     const pos = geo.getAttribute("position") as THREE.BufferAttribute;
-    const wrap = smooth(0.0, 0.4, p);
-    const pleat = smooth(0.34, 0.58, p);
-    const drop = smooth(0.0, 0.12, p);
-    for (let i = 0; i <= SK_V; i++) {
-      const v = i / SK_V;
-      // the hem drops in as the wrap begins
-      const y = SKIRT.top - (1 - v) * (SKIRT.top - SKIRT.hem) * (0.35 + 0.65 * drop);
-      const down = 1 - v;
-      const rx = skirtRx(y);
-      const rz = skirtRz(y);
-      for (let j = 0; j <= SK_U; j++) {
-        let f = j / SK_U;
-        let lift = 0;
-        if (f > wrap) {
-          f = wrap;
-        } else if (wrap < 1 && f > wrap - 0.06) {
-          lift = ((f - (wrap - 0.06)) / 0.06) ** 2 * 0.035 * (1 - wrap);
+    const out = pos.array as Float32Array;
+    const F = this.bake.skirt;
+    if (p >= 1) {
+      out.set(F);
+    } else {
+      const flat = this.pleatFlat;
+      const wrap = smooth(0, 0.42, p) * SK_NU;
+      const pleat = smooth(0.36, 0.62, p);
+      const drop = 0.35 + 0.65 * smooth(0.0, 0.14, p);
+      const jw = Math.floor(wrap);
+      for (let i = 0; i <= SK_NV; i++)
+        for (let j = 0; j <= SK_NU; j++) {
+          const src = Math.min(j, jw);
+          const o = (i * (SK_NU + 1) + src) * 3;
+          const lerp = src >= WRAP_COLS ? pleat : 1;
+          let x = flat[o] + (F[o] - flat[o]) * lerp;
+          let y = flat[o + 1] + (F[o + 1] - flat[o + 1]) * lerp;
+          let z = flat[o + 2] + (F[o + 2] - flat[o + 2]) * lerp;
+          // the edge still travelling round the body lifts away from it, as if being drawn
+          const edge = jw < SK_NU ? Math.max(0, 1 - (jw - j) / 10) : 0;
+          if (edge > 0) {
+            const lift = 1 + edge * edge * 0.12 * (1 - p);
+            x *= lift;
+            z *= lift;
+          }
+          y = WAIST_Y - (WAIST_Y - y) * drop;
+          const d = (i * (SK_NU + 1) + j) * 3;
+          out[d] = x;
+          out[d + 1] = y;
+          out[d + 2] = z;
         }
-        const th = THETA_START + f * SPAN;
-        let r = 0;
-        // inner layer under the pleats sits slightly inside
-        if (f < 0.1) r -= 0.006 * (1 - f / 0.1);
-        r += 0.011 * down ** 1.4 * Math.sin(th * 5 + 1.3) + 0.005 * down * Math.sin(th * 11 + 0.4) + 0.003 * down * Math.sin(th * 23 + 2.1);
-        if (f >= PLEAT_FRAC) {
-          const phi = (f - PLEAT_FRAC) / (1 - PLEAT_FRAC);
-          const edge = smooth(0, 0.06, phi) * smooth(1, 0.94, phi);
-          r += 0.01 + pleat * edge * (0.004 + 0.03 * down) * (0.3 + 0.7 * down) * tri(phi * 10) + pleat * 0.012 * down;
-        }
-        r += lift;
-        const s = Math.sin(th);
-        const c = Math.cos(th);
-        pos.setXYZ(i * (SK_U + 1) + j, s * (rx + r), y, c * (rz + r));
-      }
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     this.skirt.visible = p > 0.001;
   }
 
-  private tmp = new THREE.Vector3();
   private updatePallu(p: number, time: number, sway: number) {
     const geo = this.pallu.geometry;
     const pos = geo.getAttribute("position") as THREE.BufferAttribute;
-    const reveal = smooth(0.48, 0.84, p);
+    const out = pos.array as Float32Array;
+    const F = this.bake.pallu;
+    const sh = this.bake.shoulderI;
+    const reveal = smooth(0.5, 0.84, p);
     const fallT = smooth(0.7, 1.0, p);
-    // damped settle — the fabric overshoots very slightly and comes to rest
+    // damped settle — the cloth swings just past rest and comes back, once
     const settle = fallT >= 1 ? 1 : 1 - (1 - fallT) ** 2 * Math.cos(fallT * Math.PI * 1.5);
-    const lift = (1 - settle) * 1.25;
-    const sh = Math.round(DRAPE_STYLES[this.style].shoulderS * PA_S);
-    const pivot = this.centre[sh];
-    const seedha = this.style === "seedha";
-    const v = this.tmp;
-    for (let i = 0; i <= PA_S; i++) {
-      const s = i / PA_S;
-      const si = Math.min(i, Math.floor(reveal * PA_S));
-      const c = this.centre[si];
-      const b = this.across[si];
-      const n = this.normal[si];
-      const w = this.width[si] * (i > si ? 0.3 : 1);
-      const tail = Math.max(0, (si - sh) / (PA_S - sh));
-      const amp = this.foldAmp[si] * (1 + 0.15 * Math.sin(time * 0.9 + s * 4) * tail * sway);
-      // idle sway angle grows toward the end of the pallu
-      const swayA = sway * tail * tail * (0.035 * Math.sin(time * 0.55 + 0.6) + 0.012 * Math.sin(time * 1.3 + s * 3));
-      const ang = (si > sh ? lift * tail ** 0.6 + swayA : 0);
-      for (let k = 0; k <= PA_T; k++) {
-        const t = k / PA_T;
-        const off = (t - 0.5) * w;
-        const fold = amp * Math.sin(t * Math.PI * this.foldN[si] + s * 2.0) * (0.6 + 0.4 * Math.sin(s * 9.0 + t * 3));
-        v.set(c.x + b.x * off + n.x * fold, c.y + b.y * off + n.y * fold, c.z + b.z * off + n.z * fold);
+    const lift = (1 - settle) * 1.2;
+    const dir = this.style === "seedha" ? -1 : 1;
+    const pv = this.pivot;
+    const lastI = Math.floor(reveal * PA_NS);
+    for (let i = 0; i <= PA_NS; i++) {
+      const si = Math.min(i, lastI);
+      const tail = Math.max(0, (si - sh) / (PA_NS - sh));
+      // sway only ever moves the cloth away from the body, so it never needs collision
+      const breathe = sway * tail * tail * (0.016 * (0.5 + 0.5 * Math.sin(time * 0.5 + 0.6)) + 0.005 * (0.5 + 0.5 * Math.sin(time * 1.25 + si * 0.05)));
+      const ang = si > sh ? lift * Math.pow(tail, 0.6) + breathe : 0;
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang) * dir;
+      for (let k = 0; k <= PA_NT; k++) {
+        const o = (k * (PA_NS + 1) + si) * 3;
+        let x = F[o];
+        let y = F[o + 1];
+        let z = F[o + 2];
         if (ang !== 0) {
-          // rotate about the shoulder pivot around x — the pallu "falls"
-          const dy = v.y - pivot.y;
-          const dz = v.z - pivot.z;
-          const dir = seedha ? -1 : 1;
-          const ca = Math.cos(ang);
-          const sa = Math.sin(ang) * dir;
-          v.y = pivot.y + dy * ca - dz * sa;
-          v.z = pivot.z + dy * sa + dz * ca;
+          const dy = y - pv.y;
+          const dz = z - pv.z;
+          y = pv.y + dy * ca - dz * sa;
+          z = pv.z + dy * sa + dz * ca;
         }
-        pushOutside(v, 0.012);
-        for (const a of this.arms) pushOutsideCapsule(v, a.a, a.b, a.r);
-        pos.setXYZ(k * (PA_S + 1) + i, v.x, v.y, v.z);
+        if (i > lastI) {
+          // not yet laid: gathered into the travelling end
+          const c = (Math.round(PA_NT / 2) * (PA_NS + 1) + si) * 3;
+          x = x * 0.3 + F[c] * 0.7;
+          y = y * 0.3 + F[c + 1] * 0.7;
+          z = z * 0.3 + F[c + 2] * 0.7;
+        }
+        const d = (k * (PA_NS + 1) + i) * 3;
+        out[d] = x;
+        out[d + 1] = y;
+        out[d + 2] = z;
       }
     }
     pos.needsUpdate = true;
@@ -329,11 +232,19 @@ export class DrapeRig {
   }
 }
 
+function setAO(geo: THREE.BufferGeometry, ao: Float32Array) {
+  const c = geo.getAttribute("color") as THREE.BufferAttribute;
+  const a = c.array as Float32Array;
+  for (let i = 0; i < ao.length; i++) a[3 * i] = a[3 * i + 1] = a[3 * i + 2] = ao[i];
+  c.needsUpdate = true;
+}
+
 function grid(nu: number, nv: number) {
   const geo = new THREE.BufferGeometry();
   const count = (nu + 1) * (nv + 1);
   geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
   geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+  geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(count * 3).fill(1), 3));
   const idx: number[] = [];
   for (let i = 0; i < nv; i++)
     for (let j = 0; j < nu; j++) {

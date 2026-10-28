@@ -137,6 +137,8 @@ export class FabricMaterial extends THREE.MeshPhysicalMaterial {
       sheenRoughness: 0.45 - sheen * 0.12,
       sheenColor: new THREE.Color("#6f6a64"),
       side: THREE.DoubleSide,
+      // baked ambient occlusion from the drape (fold valleys, contact) arrives as vertex colour
+      vertexColors: true,
       transparent: sheer > 0.05,
       opacity: 1 - sheer * 0.3,
       envMapIntensity: 0.9,
@@ -314,8 +316,11 @@ export class Studio {
     this.key.position.set(-1.6, 4.2, 2.6);
     this.key.target.position.set(0, 0.9, 0);
     this.key.castShadow = !!opts.shadows;
-    this.key.shadow.mapSize.set(1024, 1024);
-    this.key.shadow.bias = -0.0004;
+    this.key.shadow.mapSize.set(2048, 2048);
+    this.key.shadow.bias = -0.0002;
+    this.key.shadow.normalBias = 0.012;
+    this.key.shadow.camera.near = 1.5;
+    this.key.shadow.camera.far = 8;
     this.key.shadow.radius = 4;
     this.fill = new THREE.DirectionalLight("#dfe6ff", 0.6);
     this.fill.position.set(3, 1.5, 2);
