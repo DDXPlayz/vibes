@@ -71,10 +71,12 @@ export interface Textile {
 /* ───────────────────────── Studio ───────────────────────── */
 
 export type DrapeStyleId = "nivi" | "seedha" | "open";
-export type PoseId = "classic" | "contrapposto" | "dressform";
-export type MannequinId = "ivory" | "graphite" | "stone";
+/** How the model stands. */
+export type PoseId = "poised" | "ease" | "turn";
+/** The model's skin tone. (Named for the type's history: it once chose a mannequin finish.) */
+export type MannequinId = "warm" | "deep" | "honey";
 export type LightingId = "gallery" | "daylight" | "dusk" | "studio";
-export type EnvironmentId = "ivory-gallery" | "night-gallery" | "stone-room" | "aubergine";
+export type EnvironmentId = "ivory" | "stone" | "charcoal" | "umber";
 export type ViewId = "front" | "three-quarter" | "side" | "back" | "pallu" | "border" | "weave" | "full";
 export type RenderQuality = "draft" | "standard" | "high";
 

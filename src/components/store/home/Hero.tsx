@@ -20,7 +20,7 @@ export function Hero({ content, sequence }: { content: SiteContent["hero"]; sequ
       </div>
       <StudioCanvas
         item={sequence[0]}
-        beam
+        backdrop={false}
         mode={{ kind: "hero", sequence, holdSeconds: content.intervalSeconds, onChange: setI }}
         fallback={<TextileSwatch textile={cur.textile} folded />}
       />

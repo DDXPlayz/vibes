@@ -6,6 +6,7 @@ import { StudioCanvas } from "@/components/three/StudioCanvas";
 import type { Suggestions } from "@/lib/assist";
 import type { Artisan, Collection, DrapeConfig, Render, TextileAnalysis, ViewId } from "@/lib/types";
 import { canvasToBlob, loadImageFile, processScan, samplePhoto, type ScanAdjust, type ScanResult } from "@/studio/scan";
+import { neutralBlouse } from "@/lib/view";
 import { emptyDraft, ProductFields, type ProductDraft } from "./ProductFields";
 import { StudioControls } from "./StudioControls";
 import { api, upload } from "./ui";
@@ -64,7 +65,7 @@ export function AddSaree({ artisans, collections, defaults }: { artisans: Artisa
       });
       draftId.current = `draft-${Math.random().toString(36).slice(2, 8)}`;
       const top = res.analysis.dominantColours;
-      setBlouse(top[1]?.hex ?? top[0]?.hex ?? "#3a2a2a");
+      setBlouse(neutralBlouse(top[0]?.hex ?? "#777777"));
       setDraft((d) => ({ ...d, dimensions: { ...d.dimensions, lengthM: Math.min(6.5, Math.max(4.5, res.analysis.estimatedLengthM)) } }));
     } catch (e) {
       setError((e as Error).message);
@@ -322,15 +323,13 @@ export function AddSaree({ artisans, collections, defaults }: { artisans: Artisa
           <div className="adm-card">
             <StudioControls value={drape} onChange={setDrape} />
             <div className="adm-form" style={{ marginTop: 22 }}>
-              <label className="field">
-                <span>Blouse colour</span>
-                <div className="row" style={{ gap: 8 }}>
-                  <input type="color" value={blouse} onChange={(e) => setBlouse(e.target.value)} style={{ width: 44, height: 34, border: 0, background: "none" }} />
-                  {scan!.analysis.dominantColours.map((c) => (
-                    <button type="button" key={c.hex} className="adm-swatch" style={{ background: c.hex, outline: blouse === c.hex ? "2px solid var(--gold)" : undefined }} onClick={() => setBlouse(c.hex)} title={c.name} />
-                  ))}
+              <div className="field">
+                <span>Blouse</span>
+                <div className="row" style={{ gap: 10 }}>
+                  <span className="adm-swatch" style={{ background: blouse }} />
+                  <span className="adm-note">A tailored {blouse === "#3b302a" ? "espresso" : "champagne"} silk blouse, chosen to sit quietly beside this saree. Product-specific blouses come later.</span>
                 </div>
-              </label>
+              </div>
             </div>
             <div className="row" style={{ marginTop: 28 }}>
               <button className="btn btn-ghost" onClick={() => setStep("details")}>Back</button>

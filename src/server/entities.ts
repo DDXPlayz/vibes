@@ -1,3 +1,4 @@
+import { normalizeDrape } from "@/lib/drapeConfig";
 import type { Artisan, Collection, Database, Product, Role, Story, Textile } from "@/lib/types";
 import { DEFAULT_DRAPE } from "@/lib/seed";
 import { newId } from "./db";
@@ -51,7 +52,7 @@ export const ENTITIES: Record<EntityKey, { deleteRole: Role; create(db: Database
         story: String(b.story ?? ""),
         care: String(b.care ?? "Dry clean only. Store folded in muslin."),
         textileId: String(b.textileId ?? ""),
-        drape: (b.drape as Product["drape"]) ?? db.studio.defaults ?? DEFAULT_DRAPE,
+        drape: normalizeDrape((b.drape as Product["drape"]) ?? db.studio.defaults ?? DEFAULT_DRAPE),
         renders: (b.renders as Product["renders"]) ?? [],
         tags: (b.tags as string[]) ?? [],
         seo: (b.seo as Product["seo"]) ?? { title: `${name} | VIBES`, description: String(b.description ?? "") },

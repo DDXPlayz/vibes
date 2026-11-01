@@ -4,6 +4,7 @@ import * as THREE from "three";
 import type { DrapeConfig, TextileRef, TextileSpec, ViewId } from "@/lib/types";
 import { Studio, viewCamera, type Theme } from "./scene";
 import { loadBake } from "./drapes";
+import { loadModel } from "./model";
 import { getTextures, hasWebGL, type Quality } from "./registry";
 
 /**
@@ -42,7 +43,7 @@ export function jobKey(j: Omit<RenderJob, "key">) {
 }
 
 async function run(job: RenderJob): Promise<string> {
-  const [tex] = await Promise.all([getTextures(job.textile, job.quality ?? "draft"), loadBake(job.drape.style, job.drape.pose).catch(() => null)]);
+  const [tex] = await Promise.all([getTextures(job.textile, job.quality ?? "draft"), loadModel(job.drape.pose), loadBake(job.drape.style, job.drape.pose).catch(() => null)]);
   if (!renderer) {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
     // Khronos PBR Neutral: built for product imagery — keeps the textile's true colour
@@ -51,10 +52,10 @@ async function run(job: RenderJob): Promise<string> {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setPixelRatio(1);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
   }
   if (!studio) {
-    studio = new Studio(tex, job.drape, { transparentBackground: false, shadows: true });
+    studio = new Studio(tex, job.drape, { transparentBackground: true, shadows: true });
     studio.attachRenderer(renderer);
   }
   const s = studio;
@@ -63,16 +64,15 @@ async function run(job: RenderJob): Promise<string> {
   s.setTextile(tex, job.fibre);
   s.setBlouse(job.blouse);
   s.drape.update(1, 2.0, 0);
-  const bg = s.scene.background;
-  if (job.transparent) s.scene.background = null;
+  // small stills (cards) are grounded by the contact shadow alone; cast shadows only for large renders
+  renderer.shadowMap.enabled = job.width >= 800;
   renderer.setSize(job.width, job.height, false);
   const v = viewCamera(job.view, job.drape.style);
-  const cam = new THREE.PerspectiveCamera(job.view === "full" ? 27 : 30, job.width / job.height, 0.05, 50);
+  const cam = new THREE.PerspectiveCamera(v.fov, job.width / job.height, 0.1, 50);
   cam.position.set(...v.pos);
   cam.lookAt(new THREE.Vector3(...v.target));
   renderer.setClearColor(0x000000, 0);
   renderer.render(s.scene, cam);
-  s.scene.background = bg;
   const blob: Blob | null = await new Promise((res) => renderer!.domElement.toBlob(res, "image/webp", 0.9));
   if (!blob) throw new Error("render failed");
   return URL.createObjectURL(blob);

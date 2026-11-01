@@ -10,10 +10,10 @@ const T0 = "2026-06-01T10:00:00.000Z";
 
 export const DEFAULT_DRAPE: DrapeConfig = {
   style: "nivi",
-  mannequin: "ivory",
-  pose: "classic",
+  mannequin: "warm",
+  pose: "poised",
   lighting: "gallery",
-  environment: "ivory-gallery",
+  environment: "ivory",
 };
 
 const GOLD = "#c8a35a";

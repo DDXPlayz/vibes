@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { DrapeStyleId, PoseId } from "@/lib/types";
-import { PA_NS, PA_NT, SK_NU, SK_NV, WAIST_Y, WRAP_COLS, initialDrape, palluUV, skirtLayout, skirtUV, type DrapeBake } from "./drapeBake";
+import { PA_NS, PA_NT, SK_NU, SK_NV, WAIST_Y, WRAP_COLS, palluUV, skirtLayout, skirtUV, type DrapeBake } from "./drapeBake";
 import { getBakeSync, loadBake } from "./drapes";
 
 /**
@@ -34,20 +34,37 @@ export class DrapeRig {
   readonly group = new THREE.Group();
   readonly skirt: THREE.Mesh;
   readonly pallu: THREE.Mesh;
+  /** the cloth's other face, a hair behind the front: edges read as fabric, not paper */
+  readonly skirtBack: THREE.Mesh;
+  readonly palluBack: THREE.Mesh;
+  /** the cotton petticoat a saree is tucked into — seen only while the saree is being draped */
+  readonly petticoat: THREE.Mesh;
   progress = 1;
   private style: DrapeStyleId;
   private pose: PoseId;
-  private bake!: DrapeBake;
+  private bake: DrapeBake | null = null;
   private pleatFlat = new Float32Array(0);
   private pivot = new THREE.Vector3();
   private lastKey = "";
   private lastPallu = "";
+  private hasBack = false;
 
-  constructor(material: THREE.Material, style: DrapeStyleId = "nivi", pose: PoseId = "classic") {
+  constructor(material: THREE.Material, style: DrapeStyleId = "nivi", pose: PoseId = "poised", backMaterial?: THREE.Material) {
     this.style = style;
     this.pose = pose;
     this.skirt = new THREE.Mesh(grid(SK_NU, SK_NV), material);
     this.pallu = new THREE.Mesh(grid(PA_NS, PA_NT), material);
+    const back = backMaterial ?? material;
+    this.skirtBack = new THREE.Mesh(this.skirt.geometry, back);
+    this.palluBack = new THREE.Mesh(this.pallu.geometry, back);
+    this.skirtBack.visible = this.palluBack.visible = !!backMaterial;
+    for (const m of [this.skirtBack, this.palluBack]) {
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+    }
+    this.petticoat = new THREE.Mesh(grid(SK_NU, SK_NV), new THREE.MeshStandardMaterial({ color: "#e9e2d4", roughness: 0.9, side: THREE.DoubleSide }));
+    this.petticoat.visible = false;
+    this.petticoat.frustumCulled = false;
     this.skirt.name = "skirt";
     this.pallu.name = "pallu";
     (this.skirt.geometry.getAttribute("uv") as THREE.BufferAttribute).set(SKIRT_UV);
@@ -56,16 +73,21 @@ export class DrapeRig {
       m.receiveShadow = true;
       m.frustumCulled = false;
     }
-    this.group.add(this.skirt, this.pallu);
+    this.group.add(this.skirt, this.pallu, this.skirtBack, this.palluBack, this.petticoat);
+    this.hasBack = !!backMaterial;
     this.configure(style, pose);
   }
 
-  /** Switch style/pose. Uses a baked drape when loaded, the unsimulated shape until then. */
+  /** Switch style/pose. The cloth stays hidden until its bake has loaded (usually already cached). */
   configure(style: DrapeStyleId, pose: PoseId) {
     this.style = style;
     this.pose = pose;
     const ready = getBakeSync(style, pose);
-    this.apply(ready ?? initialDrape(style, pose));
+    if (ready) this.apply(ready);
+    else {
+      this.bake = null;
+      this.skirt.visible = this.pallu.visible = this.skirtBack.visible = this.palluBack.visible = false;
+    }
     if (!ready)
       loadBake(style, pose)
         .then((b) => {
@@ -74,9 +96,10 @@ export class DrapeRig {
         .catch(() => undefined);
   }
 
-  setMaterial(material: THREE.Material) {
+  setMaterial(material: THREE.Material, backMaterial?: THREE.Material) {
     this.skirt.material = material;
     this.pallu.material = material;
+    if (backMaterial) this.skirtBack.material = this.palluBack.material = backMaterial;
   }
 
   private apply(b: DrapeBake) {
@@ -107,6 +130,28 @@ export class DrapeRig {
         flat[o + 2] = acc[2] / n;
       }
     this.pleatFlat = flat;
+    // the petticoat: the skirt's silhouette, smoothed and taken in a little
+    const pet = this.petticoat.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const pa = pet.array as Float32Array;
+    for (let i = 0; i <= SK_NV; i++)
+      for (let j = 0; j <= SK_NU; j++) {
+        const acc = [0, 0, 0];
+        let n = 0;
+        for (let q = -8; q <= 8; q++) {
+          const jj = Math.min(SK_NU, Math.max(0, j + q));
+          const o = (i * (SK_NU + 1) + jj) * 3;
+          acc[0] += b.skirt[o];
+          acc[1] += b.skirt[o + 1];
+          acc[2] += b.skirt[o + 2];
+          n++;
+        }
+        const o = (i * (SK_NU + 1) + j) * 3;
+        pa[o] = (acc[0] / n) * 0.975;
+        pa[o + 1] = Math.max(0.05, acc[1] / n);
+        pa[o + 2] = (acc[2] / n) * 0.975;
+      }
+    pet.needsUpdate = true;
+    this.petticoat.geometry.computeVertexNormals();
     // the shoulder pin is the pivot the pallu falls from
     const p = this.pivot.set(0, 0, 0);
     for (let k = 0; k <= PA_NT; k++) {
@@ -126,6 +171,7 @@ export class DrapeRig {
    */
   update(progress: number, time: number, sway = 1) {
     const p = Math.min(1, Math.max(0, progress));
+    if (!this.bake) return;
     const key = `${p.toFixed(4)}|${this.style}|${this.pose}`;
     if (key !== this.lastKey) this.updateSkirt(p);
     const pk = `${key}|${sway ? time.toFixed(2) : "still"}`;
@@ -139,7 +185,7 @@ export class DrapeRig {
     const geo = this.skirt.geometry;
     const pos = geo.getAttribute("position") as THREE.BufferAttribute;
     const out = pos.array as Float32Array;
-    const F = this.bake.skirt;
+    const F = this.bake!.skirt;
     if (p >= 1) {
       out.set(F);
     } else {
@@ -173,14 +219,16 @@ export class DrapeRig {
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     this.skirt.visible = p > 0.001;
+    this.skirtBack.visible = this.skirt.visible && this.hasBack;
+    this.petticoat.visible = p < 0.999;
   }
 
   private updatePallu(p: number, time: number, sway: number) {
     const geo = this.pallu.geometry;
     const pos = geo.getAttribute("position") as THREE.BufferAttribute;
     const out = pos.array as Float32Array;
-    const F = this.bake.pallu;
-    const sh = this.bake.shoulderI;
+    const F = this.bake!.pallu;
+    const sh = this.bake!.shoulderI;
     const reveal = smooth(0.5, 0.84, p);
     const fallT = smooth(0.7, 1.0, p);
     // damped settle — the cloth swings just past rest and comes back, once
@@ -224,11 +272,13 @@ export class DrapeRig {
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     this.pallu.visible = reveal > 0.002;
+    this.palluBack.visible = this.pallu.visible && this.hasBack;
   }
 
   dispose() {
     this.skirt.geometry.dispose();
     this.pallu.geometry.dispose();
+    this.petticoat.geometry.dispose();
   }
 }
 

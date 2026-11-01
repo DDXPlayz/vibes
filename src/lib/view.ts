@@ -75,3 +75,14 @@ export function availabilityLine(p: Pick<ProductView, "availability" | "inventor
 export function canPurchase(p: Pick<ProductView, "availability" | "available">) {
   return p.availability === "available" && p.available > 0;
 }
+
+/**
+ * The default blouse: a sophisticated neutral chosen to sit quietly beside
+ * the saree — champagne silk for most, espresso for very pale sarees.
+ */
+export function neutralBlouse(sareeBase: string) {
+  const h = sareeBase.replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.72 ? "#3b302a" : "#d6c8b2";
+}

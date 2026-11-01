@@ -1,5 +1,6 @@
 import type { Database, Product } from "@/lib/types";
-import { colourFamilies, type ProductView } from "@/lib/view";
+import { normalizeDrape } from "@/lib/drapeConfig";
+import { colourFamilies, neutralBlouse, type ProductView } from "@/lib/view";
 import { read } from "./db";
 import { mediaUrl } from "./storage";
 
@@ -33,9 +34,10 @@ export function toView(db: Database, p: Product): ProductView {
     artisan: artisan ? { id: artisan.id, slug: artisan.slug, name: artisan.name, region: artisan.region, community: artisan.community, quote: artisan.quote } : null,
     collections: p.collectionIds.map((id) => db.collections.find((c) => c.id === id)).filter(Boolean).map((c) => ({ id: c!.id, slug: c!.slug, name: c!.name })),
     textile: { id: textile?.id ?? p.textileId, source: textile?.source ?? "procedural", spec, scanUrl: mediaUrl(textile?.scanKey) },
-    blouse: spec?.blouse ?? "#3a2a2a",
+    // a restrained, tailored neutral that supports the saree rather than competing with it
+    blouse: neutralBlouse(spec?.base ?? textile?.analysis?.dominantColours[0]?.hex ?? "#777777"),
     fibre: { sheen: spec?.sheen ?? 0.55, sheer: spec?.sheer ?? 0 },
-    drape: p.drape,
+    drape: normalizeDrape(p.drape),
     renders: p.renders.map((r) => ({ view: r.view, url: mediaUrl(r.mediaKey)! })),
     status: p.status,
     createdAt: p.createdAt,

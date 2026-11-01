@@ -9,7 +9,7 @@ import styles from "./home.module.css";
 
 /**
  * "Not just a saree." — a scroll-driven story: the flat textile is recorded,
- * then rises onto the mannequin. Scroll position is the only clock.
+ * then is draped on the model. Scroll position is the only clock.
  */
 export function Idea({ content, product }: { content: SiteContent["idea"]; product: ProductView }) {
   const section = useRef<HTMLElement>(null);

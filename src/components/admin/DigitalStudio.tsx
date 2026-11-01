@@ -9,7 +9,7 @@ import { StudioControls } from "./StudioControls";
 import { Options, SaveStatus, api, useSaver } from "./ui";
 
 /**
- * One reusable studio. Every saree is inserted into the same mannequin,
+ * One reusable studio. Every saree is worn by the same model,
  * poses, lights, cameras and backgrounds — set them once here.
  */
 export function DigitalStudio({ products, settings }: { products: ProductView[]; settings: StudioSettings }) {
@@ -39,7 +39,7 @@ export function DigitalStudio({ products, settings }: { products: ProductView[];
       <div className="adm-head">
         <div>
           <h1 className="adm-h1">Digital Studio</h1>
-          <p>One mannequin, one set of lights, every saree. Changes here affect how new pieces are presented.</p>
+          <p>One model, one set of lights, every saree. Changes here affect how new pieces are presented.</p>
         </div>
         <span className="spacer" />
         <SaveStatus state={saver.state} error={saver.error} />

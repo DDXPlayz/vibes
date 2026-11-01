@@ -29,8 +29,8 @@
   --warn: #9a7027;
   --bad: #9b3b2f;
   /* stage behind the mannequin */
-  --stage-a: #f6f2ea;
-  --stage-b: #e6dfd2;
+  --stage-a: #efe9df;
+  --stage-b: #ddd3c4;
   --wordmark: rgba(30, 27, 24, 0.06);
 
   /* type */
@@ -99,8 +99,8 @@
   --ok: #8fae88;
   --warn: #d7ab5c;
   --bad: #d2786b;
-  --stage-a: #1a1714;
-  --stage-b: #0b0a09;
+  --stage-a: #2a2622;
+  --stage-b: #141210;
   --wordmark: rgba(236, 230, 219, 0.045);
   --shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.7);
   --shadow-sm: 0 8px 30px -18px rgba(0, 0, 0, 0.7);

@@ -137,7 +137,8 @@ interface Painter {
   rect(x: number, y: number, w: number, h: number, colour: string, zari?: boolean, alpha?: number): void;
 }
 
-const ZARI_MASK = "rgb(0, 72, 255)";
+// zari: metallic but woven — a satin glint, not a mirror
+const ZARI_MASK = "rgb(0, 108, 255)";
 
 function painter(g: CanvasRenderingContext2D, m: CanvasRenderingContext2D): Painter {
   return {
@@ -480,7 +481,7 @@ export function surfaceFromImage(img: CanvasImageSource & { width: number; heigh
   for (let i = 0; i < src.data.length; i += 4) {
     const z = zariScore(src.data[i], src.data[i + 1], src.data[i + 2]);
     out.data[i] = 0;
-    out.data[i + 1] = Math.round((0.78 - z * 0.5) * 255);
+    out.data[i + 1] = Math.round((0.78 - z * 0.36) * 255);
     out.data[i + 2] = Math.round(z * 255);
     out.data[i + 3] = 255;
   }

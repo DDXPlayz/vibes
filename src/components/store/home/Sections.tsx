@@ -104,9 +104,9 @@ export function Craft({ content, artisans, products }: { content: SiteContent["c
 const PIPE = [
   { k: "Scan", t: "One photograph of the flat saree", d: "Laid on the cutting table, photographed once in even light. The original file is kept untouched — it is the record." },
   { k: "Texture", t: "Colour, weave and zari, separated", d: "The studio finds the borders and pallu, measures colour, and marks the zari so gold behaves like metal under light." },
-  { k: "Drape", t: "Pleated and draped digitally", d: "The textile is mapped onto a single, consistent mannequin — pleats, wrap and pallu, in the Nivi or Seedha style." },
-  { k: "Studio", t: "Lit like the gallery", d: "The same lighting rigs for every piece, so colour is comparable from one saree to the next." },
-  { k: "Collection", t: "Every view, in minutes", d: "Front, back, pallu, border, weave — and an interactive 3D view. No photoshoot, no retouching, nothing redrawn." },
+  { k: "Drape", t: "Draped as cloth, on a person", d: "The saree falls under its own weight on our model — gathered at the tuck, pleated by hand, the pallu laid over the shoulder in the Nivi or Seedha style." },
+  { k: "Studio", t: "Lit like a campaign", d: "The same softbox light for every piece, so colour is true and comparable from one saree to the next." },
+  { k: "Collection", t: "Ready in minutes", d: "A finished editorial presentation of the real saree — no photoshoot, no retouching, nothing redrawn." },
 ];
 
 export function DrapingTimeline({ content, product }: { content: SiteContent["draping"]; product: ProductView }) {
@@ -191,24 +191,10 @@ function PipeVisual({ step, product }: { step: number; product: ProductView }) {
         <RenderImage product={product} view="full" width={520} height={693} />
       </div>
       <div className={cx(styles.pvLayer, step === 3 && styles.pvOn)}>
-        <div className={styles.pvLights}>
-          {(["gallery", "daylight", "dusk"] as const).map((l) => (
-            <figure key={l}>
-              <RenderImage product={{ ...product, drape: { ...product.drape, lighting: l } }} view="three-quarter" width={300} height={420} />
-              <figcaption className="label">{l}</figcaption>
-            </figure>
-          ))}
-        </div>
+        <RenderImage product={{ ...product, drape: { ...product.drape, lighting: "dusk" } }} view="three-quarter" width={520} height={693} />
       </div>
       <div className={cx(styles.pvLayer, step === 4 && styles.pvOn)}>
-        <div className={styles.pvViews}>
-          {(["front", "three-quarter", "side", "back", "pallu", "border"] as const).map((v) => (
-            <figure key={v}>
-              <RenderImage product={product} view={v} width={240} height={320} />
-              <figcaption className="label">{v.replace("-", " ")}</figcaption>
-            </figure>
-          ))}
-        </div>
+        <RenderImage product={product} view="back" width={520} height={693} />
       </div>
     </div>
   );

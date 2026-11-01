@@ -25,8 +25,10 @@ npm run dev          # http://localhost:3000
   - `manager@vibes.in` / `manager-demo` (products, content, studio, delete)
   - `staff@vibes.in` / `staff-demo` (add & edit sarees, inventory, orders)
 
-The draped cloth is pre-simulated: `npm run bake` regenerates `public/drapes/*.bin`
-(nine style × pose bakes, ~50 s each) after changing the body or drape code.
+The saree is shown on a realistic model built from MakeHuman's CC0 body
+(`public/model/*.bin`, rebuilt by `scripts/build-model.ts`), and the draped cloth
+is pre-simulated on her: `npm run bake` regenerates `public/drapes/*.bin`
+(nine style × pose bakes, ~30 s each) after changing the model or drape code.
 
 Data lives in `.data/` (created on first run, git-ignored). Reset it any time
 from **Studio → Settings → Reset sample data**.

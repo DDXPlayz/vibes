@@ -267,8 +267,8 @@ export function Catalogue({ products, collections, initial }: { products: Produc
             )}
             {mode === "3d" && results.length > 0 && (
               <div className={cx("stage", styles.room)}>
-                <Gallery3D products={results.slice(0, 9)} />
-                {results.length > 9 && <p className={cx("label", styles.roomNote)}>Showing 9 of {results.length} — refine to bring others into the room</p>}
+                <Gallery3D products={results.slice(0, 7)} />
+                {results.length > 7 && <p className={cx("label", styles.roomNote)}>Showing 7 of {results.length} — refine to bring others into the room</p>}
               </div>
             )}
           </div>

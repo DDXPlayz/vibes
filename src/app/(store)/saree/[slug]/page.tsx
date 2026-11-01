@@ -7,7 +7,6 @@ import { ProductInfo } from "@/components/store/product/ProductInfo";
 import { ProductViewer } from "@/components/store/product/ProductViewer";
 import styles from "@/components/store/product/product.module.css";
 import { num } from "@/lib/format";
-import type { ViewId } from "@/lib/types";
 import { mutate, read } from "@/server/db";
 import { productBySlug, storefrontProducts } from "@/server/catalog";
 
@@ -17,12 +16,6 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return seo ? { title: seo.title.replace(/ \| VIBES$/, ""), description: seo.description } : {};
 }
 
-const GALLERY: { view: ViewId; label: string }[] = [
-  { view: "front", label: "Front" },
-  { view: "three-quarter", label: "Three-quarter" },
-  { view: "back", label: "Back" },
-  { view: "pallu", label: "Pallu" },
-];
 
 export default async function SareePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -100,16 +93,12 @@ export default async function SareePage({ params }: { params: Promise<{ slug: st
             <p className="body">
               {p.weave} from {p.region}, {p.state}. {artisan?.story ?? ""}
             </p>
-            <div className={styles.renders}>
-              {GALLERY.map((g) => (
-                <figure key={g.view}>
-                  <div className={`stage ${styles.rimg}`}>
-                    <RenderImage product={p} view={g.view} width={420} height={560} />
-                  </div>
-                  <figcaption className="label">{g.label}</figcaption>
-                </figure>
-              ))}
-            </div>
+            <figure className={styles.editorial}>
+              <div className={`stage ${styles.rimg}`}>
+                <RenderImage product={p} view="back" width={900} height={1200} />
+              </div>
+              <figcaption className="label">The pallu, as it falls</figcaption>
+            </figure>
           </div>
         </section>
 

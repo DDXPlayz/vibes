@@ -1,7 +1,7 @@
 "use client";
 
 import type { DrapeConfig, DrapeStyleId, EnvironmentId, LightingId, MannequinId, PoseId } from "@/lib/types";
-import { MANNEQUIN_FINISHES, POSES } from "@/studio/body";
+import { POSES, SKIN_TONES } from "@/studio/human";
 import { DRAPE_STYLES } from "@/studio/drape";
 import { ENVIRONMENTS, LIGHTING } from "@/studio/scene";
 import { Options } from "./ui";
@@ -18,12 +18,12 @@ export function StudioControls({ value, onChange, compact }: { value: DrapeConfi
         <Options<DrapeStyleId> value={value.style} onChange={(style) => set({ style })} options={keys(DRAPE_STYLES).map((id) => ({ id, label: DRAPE_STYLES[id].label, note: compact ? undefined : DRAPE_STYLES[id].note }))} />
       </div>
       <div>
-        <h3 className="label" style={{ margin: "0 0 10px" }}>Mannequin</h3>
-        <Options<MannequinId> value={value.mannequin} onChange={(mannequin) => set({ mannequin })} options={keys(MANNEQUIN_FINISHES).map((id) => ({ id, label: MANNEQUIN_FINISHES[id].label }))} />
+        <h3 className="label" style={{ margin: "0 0 10px" }}>Model</h3>
+        <Options<MannequinId> value={value.mannequin} onChange={(mannequin) => set({ mannequin })} options={keys(SKIN_TONES).map((id) => ({ id, label: SKIN_TONES[id].label }))} />
       </div>
       <div>
         <h3 className="label" style={{ margin: "0 0 10px" }}>Pose</h3>
-        <Options<PoseId> value={value.pose} onChange={(pose) => set({ pose })} options={keys(POSES).map((id) => ({ id, label: POSES[id].label }))} />
+        <Options<PoseId> value={value.pose} onChange={(pose) => set({ pose })} options={keys(POSES).map((id) => ({ id, label: POSES[id].label, note: compact ? undefined : POSES[id].note }))} />
       </div>
       <div>
         <h3 className="label" style={{ margin: "0 0 10px" }}>Lighting</h3>

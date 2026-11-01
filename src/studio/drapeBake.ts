@@ -1,7 +1,7 @@
 import type { DrapeStyleId, PoseId } from "@/lib/types";
-import { BODY, bodyRx, torsoRz } from "./body";
 import { Cloth } from "./cloth";
-import { bodyColliders, hullCollider } from "./collider";
+import { floor, hullCollider, sampleSDF, sdfCollider, type SDF } from "./collider";
+import { profileR, type ModelData } from "./modelFormat";
 
 /**
  * Building and baking a drape.
@@ -142,12 +142,41 @@ const norm = (a: V): V => {
 };
 const cross = (a: V, b: V): V => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-/** Radius of the torso (polar) in direction θ at height y. */
-function torsoR(y: number, th: number) {
-  const rx = bodyRx(y);
-  const rz = torsoRz(y, th);
-  return 1 / Math.sqrt((Math.sin(th) / rx) ** 2 + (Math.cos(th) / rz) ** 2);
+/**
+ * Everything the drape needs to know about her, in one place: her measured
+ * profile (radius by height and angle), which way her hips and shoulders face,
+ * and — for the bake — the distance field of her body.
+ */
+export interface Fit {
+  /** radius of her body at height y, angle θ measured from *her* front */
+  R(y: number, th: number): number;
+  yawHip: number;
+  yawShoulder: number;
+  shoulderTop: number;
+  sdf?: SDF;
 }
+
+export function fitFor(model: ModelData, sdf?: SDF): Fit {
+  const L = model.landmarks;
+  const yawOf = (a: number[], b: number[]) => Math.atan2(-(a[2] - b[2]), a[0] - b[0]);
+  const yawHip = yawOf(L.hipL, L.hipR);
+  const yawShoulder = yawOf(L.shoulderL, L.shoulderR);
+  // the top of her left shoulder, where the pallu is pinned
+  let shoulderTop = 1.44;
+  if (sdf) {
+    const c = Math.cos(yawShoulder), sn = Math.sin(yawShoulder);
+    const x = 0.11 * c, z = -0.11 * sn;
+    for (let y = 1.7; y > 1.2; y -= 0.002)
+      if (sampleSDF(sdf, x, y, z) < 0.002) {
+        shoulderTop = y;
+        break;
+      }
+  }
+  return { R: (y, th) => profileR(model.profile, y, th + yawHip), yawHip, yawShoulder, shoulderTop, sdf };
+}
+
+/** Rotate a point (x, z) about the vertical axis by yaw. */
+const turn = (p: V, yaw: number): V => [p[0] * Math.cos(yaw) + p[2] * Math.sin(yaw), p[1], p[2] * Math.cos(yaw) - p[0] * Math.sin(yaw)];
 
 /* ───────── layouts shared with the runtime ───────── */
 
@@ -216,12 +245,14 @@ export function palluUV(lengthM: number) {
 
 const skIdx = (i: number, j: number) => i * (SK_NU + 1) + j;
 
-export function buildSkirt(seed: string) {
+export function buildSkirt(seed: string, fit: Fit) {
+  const torsoR = fit.R;
+  const HIP_Y = 0.94;
   const L = skirtLayout(seed);
   const r = rng(`skirt:${seed}`);
   const dv = DROP / SK_NV;
   const pos = new Float32Array((SK_NU + 1) * (SK_NV + 1) * 3);
-  const thetaE = Math.PI * 2 + Math.asin(-0.056 / bodyRx(WAIST_Y));
+  const thetaE = Math.PI * 2 + Math.asin(-0.056 / torsoR(WAIST_Y, Math.PI / 2));
   const phases = Array.from({ length: 5 }, () => r() * Math.PI * 2);
   const set = (i: number, j: number, p: V) => pos.set(p, skIdx(i, j) * 3);
 
@@ -245,7 +276,8 @@ export function buildSkirt(seed: string) {
   for (let i = 0; i <= SK_NV; i++) {
     const y = WAIST_Y - (SK_NV - i) * dv;
     const down = (SK_NV - i) / SK_NV;
-    const yc = Math.max(y, 0.9);
+    // below the fullest part of the hips the wrap falls straight
+    const yc = Math.max(y, HIP_Y);
     // wrap
     for (let j = 0; j <= WRAP_COLS; j++) {
       const f = j / WRAP_COLS;
@@ -259,7 +291,7 @@ export function buildSkirt(seed: string) {
     }
     // pleats: from the tuck (tight) to the fanned hem layout
     const w = Math.pow(down, 0.55);
-    const zFront = (yy: number) => torsoR(Math.max(yy, 0.9), 0) + 0.018;
+    const zFront = (yy: number) => torsoR(Math.max(yy, HIP_Y), 0) + 0.02;
     const start: V = [pos[skIdx(i, WRAP_COLS) * 3], y, pos[skIdx(i, WRAP_COLS) * 3 + 2]];
     let x = start[0];
     let col = WRAP_COLS;
@@ -286,13 +318,15 @@ export function buildSkirt(seed: string) {
   for (let j = WRAP_COLS + 1; j <= SK_NU; j++) {
     const o = skIdx(SK_NV, j) * 3;
     const xx = pos[o];
-    const th = Math.asin(Math.max(-0.95, Math.min(0.95, xx / bodyRx(WAIST_Y))));
-    const extra = pos[o + 2] - (torsoR(1, 0) + 0.018);
+    const th = Math.asin(Math.max(-0.95, Math.min(0.95, xx / torsoR(WAIST_Y, Math.PI / 2))));
+    const extra = pos[o + 2] - (torsoR(HIP_Y, 0) + 0.02);
     const rr = torsoR(WAIST_Y, th) + 0.009 + Math.max(0, extra);
     pos[o] = Math.sin(th) * rr;
     pos[o + 2] = Math.cos(th) * rr;
   }
 
+  // the skirt is built facing her front; turn it with her hips
+  for (let q = 0; q < pos.length; q += 3) pos.set(turn([pos[q], pos[q + 1], pos[q + 2]], fit.yawHip), q);
   const cloth = new Cloth(pos);
   // columns: horizontal rest from the fabric layout; vertical rest with a hand-draped wobble per pleat
   const colScale = L.pleatOf.map((k) => (k < 0 ? 1 : 1 + (rng(`len:${seed}:${k}`)() - 0.5) * 0.016));
@@ -393,8 +427,51 @@ function catmull(pts: V[], t: number): V {
   return [c(p0[0], p1[0], p2[0], p3[0]), c(p0[1], p1[1], p2[1], p3[1]), c(p0[2], p1[2], p2[2], p3[2])];
 }
 
-export function buildPallu(style: DrapeStyleId, seed: string) {
-  const def = PALLU[style];
+/**
+ * The pallu's path is authored for a reference figure. Fit it to her: scale
+ * heights above the waist to her shoulder, turn with her hips/shoulders, and
+ * lay the points that rest on her (front, over the shoulder) onto her surface.
+ */
+function fitKeys(def: PalluDef, fit: Fit): PathKey[] {
+  const REF_WAIST = 1.045;
+  const REF_SHOULDER = 1.508;
+  const top = def.keys.reduce((m, k, i) => (k.p[1] > def.keys[m].p[1] ? i : m), 0);
+  return def.keys.map((k, i) => {
+    let y = k.p[1];
+    if (y > REF_WAIST) y = REF_WAIST + ((y - REF_WAIST) * (fit.shoulderTop + 0.004 - REF_WAIST)) / (REF_SHOULDER - REF_WAIST);
+    const yaw = y > 1.12 ? fit.yawShoulder : fit.yawHip;
+    let p = turn([k.p[0], y, k.p[2]], yaw);
+    const b = turn(k.b, yaw);
+    const sdf = fit.sdf;
+    if (sdf) {
+      const rests = i <= top + 1;
+      const m = 0.009;
+      for (let it = 0; it < 12; it++) {
+        const d = sampleSDF(sdf, p[0], p[1], p[2]);
+        if (!rests && d >= m) break;
+        if (rests && Math.abs(d - m) < 0.0008) break;
+        const e = 0.003;
+        let g: V = [
+          sampleSDF(sdf, p[0] + e, p[1], p[2]) - sampleSDF(sdf, p[0] - e, p[1], p[2]),
+          sampleSDF(sdf, p[0], p[1] + e, p[2]) - sampleSDF(sdf, p[0], p[1] - e, p[2]),
+          sampleSDF(sdf, p[0], p[1], p[2] + e) - sampleSDF(sdf, p[0], p[1], p[2] - e),
+        ];
+        g = norm(g);
+        // only move points the field can see (inside its narrow band)
+        if (Math.abs(d) > 0.029) {
+          if (d < 0) p = add(p, g, 0.02);
+          else break;
+          continue;
+        }
+        p = add(p, g, m - d);
+      }
+    }
+    return { ...k, p, b };
+  });
+}
+
+export function buildPallu(style: DrapeStyleId, seed: string, fit: Fit) {
+  const def = { ...PALLU[style], keys: fitKeys(PALLU[style], fit) };
   const r = rng(`pallu:${style}:${seed}`);
   const pts = def.keys.map((k) => k.p as V);
   // arc-length resample of the centreline
@@ -606,38 +683,23 @@ function simulate(cloth: Cloth, steps: number, iterations: number, report?: (f: 
   }
 }
 
-/** Build the unsimulated shapes — an instant fallback before a bake has loaded. */
-export function initialDrape(style: DrapeStyleId, pose: PoseId): DrapeBake {
-  const sk = buildSkirt("vibes");
-  const pa = buildPallu(style, "vibes");
-  return {
-    style,
-    pose,
-    skirt: sk.cloth.pos,
-    pallu: pa.cloth.pos,
-    skirtAO: new Float32Array((SK_NU + 1) * (SK_NV + 1)).fill(1),
-    palluAO: new Float32Array((PA_NS + 1) * (PA_NT + 1)).fill(1),
-    palluLength: pa.length,
-    shoulderI: pa.shoulderI,
-  };
-}
-
-export function bakeDrape(style: DrapeStyleId, pose: PoseId, opts: BakeOptions = {}): DrapeBake {
+export function bakeDrape(style: DrapeStyleId, pose: PoseId, model: ModelData, sdf: SDF, opts: BakeOptions = {}): DrapeBake {
   const steps = opts.steps ?? 520;
   const iterations = opts.iterations ?? 12;
-  const body = bodyColliders(pose);
+  const fit = fitFor(model, sdf);
+  const body = [sdfCollider(sdf), floor(0)];
 
-  const sk = buildSkirt("vibes");
+  const sk = buildSkirt("vibes", fit);
   sk.cloth.colliders = [...body, ...sk.cloth.colliders];
   simulate(sk.cloth, steps, iterations, (f) => opts.onProgress?.("skirt", f));
 
   smoothTuck(sk.cloth.pos);
-  const hull = hullCollider(sk.cloth.pos, BODY.waist + 0.03);
-  const pa = buildPallu(style, "vibes");
+  const hull = hullCollider(sk.cloth.pos, WAIST_Y + 0.025);
+  const pa = buildPallu(style, "vibes", fit);
   pa.cloth.colliders = [...body, hull];
   simulate(pa.cloth, Math.round(steps * 0.8), iterations, (f) => opts.onProgress?.("pallu", f));
 
-  // skirt shading: valleys, the tuck, the floor, and under the pallu at the back
+  // skirt shading: valleys, the tuck, the floor
   const skirtAO = bakeAO(sk.cloth.pos, SK_NU, SK_NV, (_x, y) => (y < 0.025 ? 0.86 + y * 5 : 1) * (y > WAIST_Y - 0.03 ? 0.9 : 1));
   const palluAO = bakeAO(pa.cloth.pos, PA_NS, PA_NT);
   return { style, pose, skirt: sk.cloth.pos, pallu: pa.cloth.pos, skirtAO, palluAO, palluLength: pa.length, shoulderI: pa.shoulderI };

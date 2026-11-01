@@ -68,7 +68,7 @@ export function ContentEditor({ content, products, collections, artisans, storie
           <Field label="Tagline"><input className="input" value={c.hero.tagline} onChange={(e) => up("hero", { tagline: e.target.value })} /></Field>
           <Field label="Primary button"><input className="input" value={c.hero.primaryCta} onChange={(e) => up("hero", { primaryCta: e.target.value })} /></Field>
           <Field label="Secondary button"><input className="input" value={c.hero.secondaryCta} onChange={(e) => up("hero", { secondaryCta: e.target.value })} /></Field>
-          <Field label="Sarees on the mannequin (in order)" full hint="The hero drapes the first, then weaves into each of the others.">
+          <Field label="Sarees in the hero (in order)" full hint="The hero opens on the first, then cuts softly to each of the others.">
             <Picker all={products} value={c.hero.productIds} onChange={(productIds) => up("hero", { productIds })} />
           </Field>
           <Field label="Seconds on each saree"><input className="input" type="number" min={6} max={60} value={c.hero.intervalSeconds} onChange={(e) => up("hero", { intervalSeconds: +e.target.value })} /></Field>

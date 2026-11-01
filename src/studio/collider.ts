@@ -1,54 +1,12 @@
-import type { PoseId } from "@/lib/types";
-import { BODY, armJoints, bodyRx, legJoints, shoulderCaps, torsoRz } from "./body";
 import type { Collider } from "./cloth";
+import type { MeshData } from "./modelFormat";
 
 /**
- * The body as the cloth feels it. Built from the same analytic description
- * as the mannequin mesh, so fabric rests exactly on the visible surface.
+ * What the cloth collides with: her body (a signed distance field built from
+ * the model mesh), the floor, and the finished skirt (for the pallu).
  */
 
 type V3 = { x: number; y: number; z: number };
-const TORSO_TOP = 1.545;
-
-function torsoD(x: number, y: number, z: number, m: number) {
-  const th = Math.atan2(x, z);
-  const rx = bodyRx(y) + m;
-  const rz = torsoRz(y, th) + m;
-  return Math.sqrt((x / rx) ** 2 + (z / rz) ** 2);
-}
-
-/** Torso: pushed out along the true surface normal (so cloth can rest on a sloping shoulder). */
-export function torsoCollider(): Collider {
-  const h = 0.0015;
-  return (p, i, m) => {
-    const k = 3 * i;
-    let x = p[k];
-    let y = p[k + 1];
-    let z = p[k + 2];
-    if (y < BODY.torsoBottom || y > TORSO_TOP) return false;
-    let hit = false;
-    for (let it = 0; it < 2; it++) {
-      const d = torsoD(x, y, z, m);
-      if (d >= 1) break;
-      hit = true;
-      const gx = (torsoD(x + h, y, z, m) - torsoD(x - h, y, z, m)) / (2 * h);
-      const gy = y + h > TORSO_TOP || y - h < BODY.torsoBottom ? 0 : (torsoD(x, y + h, z, m) - torsoD(x, y - h, z, m)) / (2 * h);
-      const gz = (torsoD(x, y, z + h, m) - torsoD(x, y, z - h, m)) / (2 * h);
-      const g2 = gx * gx + gy * gy + gz * gz;
-      if (g2 < 1e-6) break;
-      const s = (1 - d) / g2;
-      x += gx * s;
-      y += gy * s;
-      z += gz * s;
-    }
-    if (hit) {
-      p[k] = x;
-      p[k + 1] = y;
-      p[k + 2] = z;
-    }
-    return hit;
-  };
-}
 
 /** A capsule whose radius tapers from ra (at a) to rb (at b). */
 export function taperedCapsule(a: V3, b: V3, ra: number, rb: number): Collider {
@@ -91,26 +49,6 @@ export function floor(level = 0): Collider {
     p[k] = level + m;
     return true;
   };
-}
-
-/** Every part of the body for a pose. */
-export function bodyColliders(pose: PoseId): Collider[] {
-  const out: Collider[] = [torsoCollider(), floor(0)];
-  // neck
-  out.push(taperedCapsule({ x: 0, y: 1.5, z: 0.005 }, { x: 0, y: 1.66, z: 0.005 }, 0.048, 0.042));
-  for (const c of shoulderCaps(pose)) out.push(sphere(c, 0.052));
-  for (const l of legJoints(pose)) {
-    out.push(taperedCapsule(l.hip, l.knee, 0.088, 0.056));
-    out.push(taperedCapsule(l.knee, l.ankle, 0.056, 0.034));
-    out.push(taperedCapsule({ x: l.ankle.x, y: l.ankle.y + 0.005, z: l.ankle.z - 0.03 }, l.toe, 0.036, 0.024));
-  }
-  for (const j of armJoints(pose)) {
-    // the upper arm includes the blouse sleeve
-    out.push(taperedCapsule(j.sh, j.elbow, 0.058, 0.04));
-    out.push(taperedCapsule(j.elbow, j.wrist, 0.036, 0.028));
-    out.push(sphere({ x: j.wrist.x, y: j.wrist.y - 0.045, z: j.wrist.z }, 0.034));
-  }
-  return out;
 }
 
 /**
@@ -157,5 +95,131 @@ export function hullCollider(positions: Float32Array, top: number): Collider {
     p[k] = (x / d) * want;
     p[k + 2] = (z / d) * want;
     return true;
+  };
+}
+
+/* ───────── the model's body as a signed distance field ───────── */
+
+export interface SDF {
+  min: [number, number, number];
+  h: number;
+  n: [number, number, number];
+  d: Float32Array;
+}
+
+/**
+ * Signed distance to her body surface on a 6 mm grid. Computed in a narrow
+ * band around the surface from dense surface samples (sign from the sample's
+ * normal), then the far field is flood-filled from outside, so anything deep
+ * inside reads as inside.
+ */
+export function bodySDF(body: MeshData, h = 0.006, band = 0.03): SDF {
+  const P = body.pos;
+  const Nn = body.normal;
+  const I = body.index;
+  let lo = [Infinity, Infinity, Infinity];
+  let hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < P.length; i += 3)
+    for (let a = 0; a < 3; a++) {
+      lo[a] = Math.min(lo[a], P[i + a]);
+      hi[a] = Math.max(hi[a], P[i + a]);
+    }
+  lo = lo.map((v) => v - band - 2 * h);
+  hi = hi.map((v) => v + band + 2 * h);
+  const n = [0, 1, 2].map((a) => Math.ceil((hi[a] - lo[a]) / h) + 1) as [number, number, number];
+  const FAR = 1e9;
+  const d = new Float32Array(n[0] * n[1] * n[2]).fill(FAR);
+  const r = Math.ceil(band / h);
+  const splat = (px: number, py: number, pz: number, nx: number, ny: number, nz: number) => {
+    const ix = Math.round((px - lo[0]) / h);
+    const iy = Math.round((py - lo[1]) / h);
+    const iz = Math.round((pz - lo[2]) / h);
+    for (let z = Math.max(0, iz - r); z <= Math.min(n[2] - 1, iz + r); z++)
+      for (let y = Math.max(0, iy - r); y <= Math.min(n[1] - 1, iy + r); y++)
+        for (let x = Math.max(0, ix - r); x <= Math.min(n[0] - 1, ix + r); x++) {
+          const dx = lo[0] + x * h - px;
+          const dy = lo[1] + y * h - py;
+          const dz = lo[2] + z * h - pz;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dist > band) continue;
+          const k = (z * n[1] + y) * n[0] + x;
+          if (dist < Math.abs(d[k])) d[k] = dx * nx + dy * ny + dz * nz >= 0 ? dist : -dist;
+        }
+  };
+  // vertices and triangle centres: about 3-4 mm apart on the subdivided body
+  for (let i = 0; i < P.length; i += 3) splat(P[i], P[i + 1], P[i + 2], Nn[i], Nn[i + 1], Nn[i + 2]);
+  for (let t = 0; t < I.length; t += 3) {
+    const a = I[t] * 3, b = I[t + 1] * 3, c = I[t + 2] * 3;
+    const nx = Nn[a] + Nn[b] + Nn[c], ny = Nn[a + 1] + Nn[b + 1] + Nn[c + 1], nz = Nn[a + 2] + Nn[b + 2] + Nn[c + 2];
+    const l = Math.hypot(nx, ny, nz) || 1;
+    splat((P[a] + P[b] + P[c]) / 3, (P[a + 1] + P[b + 1] + P[c + 1]) / 3, (P[a + 2] + P[b + 2] + P[c + 2]) / 3, nx / l, ny / l, nz / l);
+  }
+  // flood the untouched far field from the outside; whatever is left is inside
+  const outside = new Uint8Array(d.length);
+  const stack: number[] = [0];
+  outside[0] = 1;
+  while (stack.length) {
+    const k = stack.pop()!;
+    const x = k % n[0];
+    const y = Math.floor(k / n[0]) % n[1];
+    const z = Math.floor(k / (n[0] * n[1]));
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+      const xx = x + dx, yy = y + dy, zz = z + dz;
+      if (xx < 0 || yy < 0 || zz < 0 || xx >= n[0] || yy >= n[1] || zz >= n[2]) continue;
+      const kk = (zz * n[1] + yy) * n[0] + xx;
+      if (outside[kk] || (d[kk] !== FAR && d[kk] < h)) continue;
+      outside[kk] = 1;
+      if (d[kk] === FAR) stack.push(kk);
+    }
+  }
+  for (let k = 0; k < d.length; k++) if (d[k] === FAR) d[k] = outside[k] ? band : -band;
+  return { min: lo as [number, number, number], h, n, d };
+}
+
+export function sampleSDF(s: SDF, x: number, y: number, z: number) {
+  const fx = (x - s.min[0]) / s.h, fy = (y - s.min[1]) / s.h, fz = (z - s.min[2]) / s.h;
+  if (fx < 0 || fy < 0 || fz < 0 || fx >= s.n[0] - 1 || fy >= s.n[1] - 1 || fz >= s.n[2] - 1) return 1;
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), z0 = Math.floor(fz);
+  const tx = fx - x0, ty = fy - y0, tz = fz - z0;
+  const nx = s.n[0], nxy = s.n[0] * s.n[1];
+  const k = z0 * nxy + y0 * nx + x0;
+  const D = s.d;
+  const c00 = D[k] * (1 - tx) + D[k + 1] * tx;
+  const c10 = D[k + nx] * (1 - tx) + D[k + nx + 1] * tx;
+  const c01 = D[k + nxy] * (1 - tx) + D[k + nxy + 1] * tx;
+  const c11 = D[k + nxy + nx] * (1 - tx) + D[k + nxy + nx + 1] * tx;
+  return (c00 * (1 - ty) + c10 * ty) * (1 - tz) + (c01 * (1 - ty) + c11 * ty) * tz;
+}
+
+/** Push cloth out of her body along the field's gradient. */
+export function sdfCollider(s: SDF): Collider {
+  const e = s.h * 0.5;
+  return (p, i, m) => {
+    const k = 3 * i;
+    let x = p[k], y = p[k + 1], z = p[k + 2];
+    let hit = false;
+    for (let it = 0; it < 3; it++) {
+      const d = sampleSDF(s, x, y, z);
+      if (d >= m) break;
+      hit = true;
+      let gx = sampleSDF(s, x + e, y, z) - sampleSDF(s, x - e, y, z);
+      let gy = sampleSDF(s, x, y + e, z) - sampleSDF(s, x, y - e, z);
+      let gz = sampleSDF(s, x, y, z + e) - sampleSDF(s, x, y, z - e);
+      const gl = Math.hypot(gx, gy, gz);
+      if (gl < 1e-9) break;
+      gx /= gl;
+      gy /= gl;
+      gz /= gl;
+      const push = m - d;
+      x += gx * push;
+      y += gy * push;
+      z += gz * push;
+    }
+    if (hit) {
+      p[k] = x;
+      p[k + 1] = y;
+      p[k + 2] = z;
+    }
+    return hit;
   };
 }
