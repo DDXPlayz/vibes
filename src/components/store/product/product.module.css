@@ -1,0 +1,324 @@
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+  gap: var(--s-8);
+  padding-top: var(--s-5);
+}
+.viewer {
+  position: sticky;
+  top: calc(var(--header-h) + 16px);
+  /* the whole figure, jaw to hem, in the first view */
+  height: calc(100svh - var(--header-h) - 96px);
+  min-height: 560px;
+}
+.info {
+  display: grid;
+  gap: var(--s-4);
+  align-content: start;
+  padding: var(--s-6) 0;
+}
+.actions {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+}
+.wish {
+  width: 100%;
+}
+/* fashion mode: almost no interface */
+.modes {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  display: flex;
+  gap: 18px;
+  z-index: 2;
+}
+.modes button {
+  font-size: var(--t-2xs);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: 4px;
+  border-bottom: 1px solid transparent;
+  transition: color var(--dur-2) var(--ease-silk), border-color var(--dur-2) var(--ease-silk);
+}
+.modes button:hover {
+  color: var(--ink);
+}
+.modes .modeOn {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+.views {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+.viewLink {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-style: italic;
+  color: var(--ink-3);
+  transition: color var(--dur-2) var(--ease-silk);
+}
+.viewLink:hover,
+.viewOn {
+  color: var(--ink);
+}
+.light {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  font-size: var(--t-2xs);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.light:hover {
+  color: var(--ink);
+}
+.hint {
+  position: absolute;
+  top: 46px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+  transition: opacity 1.2s var(--ease-silk);
+}
+.hintGone {
+  opacity: 0;
+}
+
+/* textile mode: the explanation */
+.textile {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 64px 6% 32px;
+  display: grid;
+  gap: 28px;
+  align-content: start;
+  background: var(--surface);
+}
+.tStripWrap {
+  display: grid;
+  gap: 10px;
+}
+.tStrip {
+  position: relative;
+  aspect-ratio: 4.8;
+  box-shadow: var(--shadow-sm);
+  cursor: crosshair;
+}
+.tScale {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--t-2xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.tParts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.tParts figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.tParts figure > div {
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.tFacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 0 24px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.tFacts div {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.tFacts dt {
+  font-size: var(--t-2xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.tFacts dd {
+  margin: 4px 0 0;
+  font-size: var(--t-sm);
+}
+.lens {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  transform: translate(-50%, -115%);
+  box-shadow: 0 0 0 1px var(--gold), var(--shadow);
+  pointer-events: none;
+  transition: opacity 0.4s var(--ease-silk);
+}
+
+/* sections below the fold */
+.chapter {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: var(--s-7);
+  padding: var(--s-9) 0;
+  border-top: 1px solid var(--line);
+}
+.chapter > :first-child {
+  position: sticky;
+  top: calc(var(--header-h) + 32px);
+  align-self: start;
+}
+.textileRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-4);
+}
+.textileRow figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.textileRow figure > div {
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.palette {
+  display: flex;
+  gap: 10px;
+  margin-top: var(--s-5);
+  flex-wrap: wrap;
+}
+.palette span {
+  display: grid;
+  gap: 6px;
+  font-size: var(--t-2xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.palette i {
+  width: 64px;
+  height: 64px;
+  display: block;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.story {
+  font-family: var(--serif);
+  font-size: clamp(28px, 3.2vw, 46px);
+  line-height: 1.22;
+  font-weight: 300;
+  max-width: 26ch;
+  margin: 0;
+}
+.renders {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-3);
+}
+.renders figure {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.renders .rimg {
+  aspect-ratio: 3 / 4;
+  position: relative;
+}
+.renders img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.artisanCard {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--s-6);
+  align-items: center;
+}
+.artisanCard > div:first-child {
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+.related {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--s-6);
+}
+@media (max-width: 960px) {
+  .top {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .viewer {
+    position: relative;
+    top: 0;
+    height: 72svh;
+    min-height: 460px;
+    margin: 0 calc(var(--gutter) * -1);
+  }
+  .tParts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .views {
+    gap: 14px;
+    top: auto;
+    bottom: 12px;
+  }
+  .hint {
+    display: none;
+  }
+  .chapter {
+    grid-template-columns: 1fr;
+    gap: var(--s-5);
+    padding: var(--s-8) 0;
+  }
+  .chapter > :first-child {
+    position: static;
+  }
+  .renders,
+  .related {
+    grid-template-columns: 1fr 1fr;
+  }
+  .artisanCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editorial {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+}
+.editorial .rimg {
+  aspect-ratio: 3 / 4;
+  position: relative;
+}
+.editorial img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
